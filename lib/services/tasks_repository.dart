@@ -127,15 +127,23 @@ class TasksRepository extends ChangeNotifier {
   Future<List<TaskList>> getTaskLists() =>
       _api(() => _tasksApi!.tasklists.list().then((v) => v.items ?? []));
 
-  Future<List<Task>> getTasks(String tasklistId) => _api(() => _tasksApi!
-      .tasks
-      .list(
-        tasklistId,
-        showCompleted: true,
-        showDeleted: false,
-        $fields: 'items(id,title,status,notes,due,completed,parent,position)',
-      )
-      .then((v) => v.items ?? []));
+  Future<List<Task>> getTasks(String tasklistId) => _api(() async {
+      final allTasks = <Task>[];
+      String? pageToken;
+      do {
+        final response = await _tasksApi!.tasks.list(
+          tasklistId,
+          showCompleted: true,
+          showDeleted: false,
+          pageToken: pageToken,
+          maxResults: 100,
+          $fields: 'nextPageToken,items(id,title,status,notes,due,completed,parent,position)',
+        );
+        allTasks.addAll(response.items ?? []);
+        pageToken = response.nextPageToken;
+      } while (pageToken != null);
+      return allTasks;
+    });
 
   Future<Task> createTask(
     String tasklistId, {
