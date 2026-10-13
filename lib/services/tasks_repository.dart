@@ -181,6 +181,15 @@ class TasksRepository extends ChangeNotifier {
             taskId,
           ));
 
+  Future<void> deleteCompletedTasks(String tasklistId) async {
+    final tasks = await getTasks(tasklistId);
+    final completed = tasks.where((t) => t.status == 'completed' && t.id != null);
+    for (final task in completed) {
+      await deleteTask(tasklistId, task.id!);
+    }
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _sub?.cancel();

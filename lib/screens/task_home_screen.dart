@@ -87,6 +87,48 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     );
   }
 
+  Future<void> _deleteCompletedTasks() async {
+    final repo = context.read<TasksRepository>();
+    final id = repo.selectedTasklistId;
+    if (id == null) return;
+
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete completed tasks?'),
+            content: const Text('This will permanently remove all completed tasks. This action cannot be undone.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) return;
+
+    setState(() => _loading = true);
+    try {
+      await repo.deleteCompletedTasks(id);
+      await _refreshTasks();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete completed tasks: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final repo = context.watch<TasksRepository>();
@@ -99,7 +141,12 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(selectedList.title ?? 'Tasks'),
-        actions: [
+         actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            onPressed: _deleteCompletedTasks,
+            tooltip: 'Delete completed tasks',
+          ),
           IconButton(
             icon: const Icon(Icons.list),
             onPressed: _showListSwitcher,
