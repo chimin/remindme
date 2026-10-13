@@ -1,4 +1,4 @@
-package chimin.remindme.remindme
+﻿package chimin.remindme
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "chimin.remindme.remindme"
+    namespace = "chimin.remindme"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "chimin.remindme.remindme"
+        applicationId = "chimin.remindme"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -30,7 +30,28 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("dev") {
+            val keystore = file("../../secrets/debug.keystore")
+            if (!keystore.exists()) {
+                throw GradleException(
+                    "secrets/debug.keystore not found. Place the shared debug keystore there, or create one with: " +
+                    "keytool -genkey -v -keystore secrets/debug.keystore -alias androiddebugkey " +
+                    "-keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android " +
+                    "(then register its SHA-1 in Google Cloud Console)"
+                )
+            }
+            storeFile = keystore
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("dev")
+        }
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
