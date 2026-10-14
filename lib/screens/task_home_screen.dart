@@ -3,6 +3,7 @@ import 'package:googleapis/tasks/v1.dart';
 import 'package:provider/provider.dart';
 
 import '../services/tasks_repository.dart';
+import '../utils/log.dart';
 
 class TaskHomeScreen extends StatefulWidget {
   const TaskHomeScreen({super.key});
@@ -32,7 +33,8 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
       }
       await _refreshLists();
       await _refreshTasks();
-    } catch (e) {
+    } catch (e, st) {
+      logError('Failed to load tasks', e, st);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to load tasks: $e')),
@@ -118,7 +120,8 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     try {
       await repo.deleteCompletedTasks(id);
       await _refreshTasks();
-    } catch (e) {
+    } catch (e, st) {
+      logError('Failed to delete completed tasks', e, st);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to delete completed tasks: $e')),
@@ -298,6 +301,7 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
           title: _titleController.text.trim(),
           notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
           completed: widget.task?.status == 'completed',
+          due: _dueDate,
         );
       } else {
         await repo.createTask(
@@ -308,7 +312,8 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
         );
       }
       if (mounted) Navigator.of(context).pop();
-    } catch (e) {
+    } catch (e, st) {
+      logError('Failed to save task', e, st);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to save task: $e')),
@@ -325,7 +330,8 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
       final repo = context.read<TasksRepository>();
       await repo.deleteTask(widget.taskListId, widget.task!.id!);
       if (mounted) Navigator.of(context).pop();
-    } catch (e) {
+    } catch (e, st) {
+      logError('Failed to delete task', e, st);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to delete task: $e')),

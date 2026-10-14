@@ -152,7 +152,7 @@ class TasksRepository extends ChangeNotifier {
     DateTime? due,
   }) async =>
       _api(() => _tasksApi!.tasks.insert(
-            Task(title: title, notes: notes, due: due?.toIso8601String()),
+            Task(title: title, notes: notes, due: _formatDueDate(due)),
             tasklistId,
           ));
 
@@ -162,11 +162,13 @@ class TasksRepository extends ChangeNotifier {
     String? title,
     String? notes,
     bool? completed,
+    DateTime? due,
   }) async {
     final req = Task(
       title: title,
       notes: notes,
       status: (completed == true) ? 'completed' : 'needsAction',
+      due: _formatDueDate(due),
     );
     return _api(() => _tasksApi!.tasks.patch(req, tasklistId, taskId));
   }
@@ -189,6 +191,9 @@ class TasksRepository extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  static String? _formatDueDate(DateTime? due) =>
+      due == null ? null : DateTime.utc(due.year, due.month, due.day).toIso8601String();
 
   @override
   void dispose() {

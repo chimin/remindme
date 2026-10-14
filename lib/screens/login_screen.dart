@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/tasks_repository.dart';
+import '../utils/log.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -20,7 +21,8 @@ class LoginScreen extends StatelessWidget {
               : () async {
                   try {
                     await context.read<TasksRepository>().signIn();
-                  } catch (e) {
+                  } catch (e, st) {
+                    logError('Sign in failed', e, st);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('Sign in failed: $e')),
