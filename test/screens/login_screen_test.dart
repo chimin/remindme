@@ -199,10 +199,19 @@ Future<void> _writeReport({
 
 void main() {
   setUpAll(() async {
-    final fontBytes = await File('test/fonts/roboto-regular.ttf').readAsBytes();
-    final fontLoader = FontLoader('Roboto')
-      ..addFont(Future<ByteData>.value(ByteData.view(fontBytes.buffer)));
-    await fontLoader.load();
+    final robotoBytes = await File('test/fonts/roboto-regular.ttf').readAsBytes();
+    final robotoLoader = FontLoader('Roboto')
+      ..addFont(Future<ByteData>.value(ByteData.view(robotoBytes.buffer)));
+    await robotoLoader.load();
+
+    final materialIconsBytes = await File(
+      'test/fonts/materialicons-regular.otf',
+    ).readAsBytes();
+    final materialIconsLoader = FontLoader('MaterialIcons')
+      ..addFont(
+        Future<ByteData>.value(ByteData.view(materialIconsBytes.buffer)),
+      );
+    await materialIconsLoader.load();
   });
 
   testWidgets(
