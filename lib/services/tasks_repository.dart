@@ -28,6 +28,16 @@ class TasksRepository extends ChangeNotifier {
 
   Future<void> init() async {
     await _signIn.initialize(serverClientId: getGoogleWebClientId().isNotEmpty ? getGoogleWebClientId() : null);
+
+    // Attempt silent sign-in with cached credentials before marking initialized,
+    // so AuthRouter goes straight to the home screen when already signed in
+    // instead of flashing the login screen.
+    final account = await _signIn.attemptLightweightAuthentication();
+    if (account != null) {
+      _currentUser = account;
+      await _checkAuthorization();
+    }
+
     initialized = true;
     _sub = _signIn.authenticationEvents.listen((e) async {
       switch (e) {
@@ -43,7 +53,6 @@ class TasksRepository extends ChangeNotifier {
       }
       notifyListeners();
     });
-    unawaited(_signIn.attemptLightweightAuthentication());
     await _loadSelectedTasklist();
   }
 
