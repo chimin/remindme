@@ -9,7 +9,7 @@ void main() {
     expect(items, isEmpty);
   });
 
-  test('tasks without due dates land in Today (sorted first)', () {
+  test('tasks without due dates land in Today', () {
     final now = DateTime(2026, 1, 15, 10);
     final tasks = [
       Task(id: 'a', title: 'No due date'),
@@ -28,40 +28,44 @@ void main() {
     expect(items[2]['title'], 'Also no due date');
   });
 
-  test('groups by Today, Overdue then future in order', () {
+  test('groups by Overdue, Today then future in order', () {
     final now = DateTime(2026, 1, 15, 10);
     final tasks = [
-      // future
-      Task(id: 'future', title: 'Future task', due: '2026-01-20'),
+      // overdue, different dates
+      Task(id: 'overdue1', title: 'Overdue task 1', due: '2026-01-10'),
+      Task(id: 'overdue2', title: 'Overdue task 2', due: '2026-01-05'),
       // today
-      Task(id: 'today', title: 'Today task', due: '2026-01-15'),
-      // overdue
-      Task(id: 'overdue', title: 'Old task', due: '2026-01-10'),
-      // completed today
-      Task(id: 'done', title: 'Done today', status: 'completed', due: '2026-01-15'),
+      Task(id: 'today1', title: 'Today task 1', due: '2026-01-15'),
+      Task(id: 'today2', title: 'Today task 2', due: '2026-01-15'),
+      // future, different dates
+      Task(id: 'future1', title: 'Future task 1', due: '2026-01-16'),
+      Task(id: 'future2', title: 'Future task 2', due: '2026-01-20'),
     ];
 
     final items = buildWidgetDisplayItems(tasks, now);
 
-    // Today header + 2 tasks, Overdue header + 1 task, future date header + 1 task
+    // Overdue header + 2 tasks (combined despite different dates), Today header + 2 tasks,
+    // two future headers + 1 task each (future groups by exact date)
     expect(items.map((e) => e['type']).toList(), [
+      'header', 'task', 'task',
       'header', 'task', 'task',
       'header', 'task',
       'header', 'task',
     ]);
 
-    expect(items[0]['title'], 'Today');
-    expect(items[1]['title'], 'Today task');
-    expect(items[2]['title'], 'Done today');
-    expect(items[2]['completed'], isTrue);
+    expect(items[0]['title'], 'Overdue');
+    expect(items[0]['category'], 'overdue');
+    expect(items[1]['title'], 'Overdue task 1');
+    expect(items[2]['title'], 'Overdue task 2');
 
-    expect(items[3]['title'], 'Overdue');
-    expect(items[3]['category'], 'overdue');
-    expect(items[4]['title'], 'Old task');
+    expect(items[3]['title'], 'Today');
+    expect(items[4]['title'], 'Today task 1');
+    expect(items[5]['title'], 'Today task 2');
 
-    expect(items[5]['title'], '2026-01-20');
-    expect(items[5]['category'], 'future');
-    expect(items[6]['title'], 'Future task');
+    expect(items[6]['category'], 'future');
+    expect(items[7]['title'], 'Future task 1');
+    expect(items[8]['category'], 'future');
+    expect(items[9]['title'], 'Future task 2');
   });
 
   test('overdue header uses red category and today is not red', () {
@@ -72,10 +76,10 @@ void main() {
     ];
     final items = buildWidgetDisplayItems(tasks, now);
 
-    // Today sorts first, then Overdue.
-    final todayHeader = items[0];
-    final pastHeader = items[2];
+    // Overdue sorts first, then Today.
+    final overdueHeader = items[0];
+    final todayHeader = items[2];
+    expect(overdueHeader['category'], 'overdue');
     expect(todayHeader['category'], 'today');
-    expect(pastHeader['category'], 'overdue');
   });
 }

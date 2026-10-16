@@ -3,14 +3,18 @@ import 'package:googleapis/tasks/v1.dart';
 import '../models/task_item.dart';
 
 /// Groups [tasks] by due date, exactly like the app's task home screen, and
-/// returns the groups in display order (Today, Overdue, future).
+/// returns the groups in display order (Overdue, Today, future).
 ///
-/// Tasks without a due date are placed in the "Today" group, matching the
-/// app's existing behavior.
+/// All overdue tasks are combined under a single "Overdue" group regardless of
+/// their exact due date. Tasks without a due date are placed in the "Today"
+/// group, matching the app's existing behavior.
 List<TaskGroup> groupTasksByDueDate(List<Task> tasks, DateTime now) {
   final today = DateTime(now.year, now.month, now.day);
 
-  final buckets = <DateTime, List<Task>>{};
+  final overdueTasks = <Task>[];
+  final todayTasks = <Task>[];
+  final futureTasks = <DateTime, List<Task>>{};
+
   for (final task in tasks) {
     DateTime? date;
     final due = task.due;
@@ -22,42 +26,38 @@ List<TaskGroup> groupTasksByDueDate(List<Task> tasks, DateTime now) {
     }
     // Tasks without a due date fall into the Today bucket.
     final key = date ?? today;
-    buckets.putIfAbsent(key, () => <Task>[]).add(task);
+    if (key.isBefore(today)) {
+      overdueTasks.add(task);
+    } else if (key.isAtSameMomentAs(today)) {
+      todayTasks.add(task);
+    } else {
+      futureTasks.putIfAbsent(key, () => <Task>[]).add(task);
+    }
   }
 
-  final sortedKeys = buckets.keys.toList()..sort((a, b) {
-        final isAToday = a.isAtSameMomentAs(today);
-        final isBToday = b.isAtSameMomentAs(today);
-        if (isAToday && !isBToday) return -1;
-        if (!isAToday && isBToday) return 1;
-        // Past dates before future dates.
-        if (a.isBefore(today) && b.isAfter(today)) return -1;
-        if (a.isAfter(today) && b.isBefore(today)) return 1;
-        return a.compareTo(b);
-      });
-
-  return sortedKeys.map((date) {
-    final isToday = date.isAtSameMomentAs(today);
-    final isPast = date.isBefore(today);
-    final String title;
-    final String category;
-    if (isToday) {
-      title = 'Today';
-      category = 'today';
-    } else if (isPast) {
-      title = 'Overdue';
-      category = 'overdue';
-    } else {
-      title = '${date.year}-${date.month.toString().padLeft(2, '0')}'
-          '-${date.day.toString().padLeft(2, '0')}';
-      category = 'future';
-    }
-    return TaskGroup(
-      title: title,
-      category: category,
-      tasks: buckets[date]!,
+  final groups = <TaskGroup>[];
+  if (overdueTasks.isNotEmpty) {
+    groups.add(
+      TaskGroup(title: 'Overdue', category: 'overdue', tasks: overdueTasks),
     );
-  }).toList();
+  }
+  if (todayTasks.isNotEmpty) {
+    groups.add(
+      TaskGroup(title: 'Today', category: 'today', tasks: todayTasks),
+    );
+  }
+  final futureKeys = futureTasks.keys.toList()..sort();
+  for (final key in futureKeys) {
+    groups.add(
+      TaskGroup(
+        title: '${key.year}-${key.month.toString().padLeft(2, '0')}'
+            '-${key.day.toString().padLeft(2, '0')}',
+        category: 'future',
+        tasks: futureTasks[key]!,
+      ),
+    );
+  }
+  return groups;
 }
 
 /// Builds a flat, JSON-serializable list of display items for the widget: a
