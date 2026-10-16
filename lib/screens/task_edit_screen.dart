@@ -136,6 +136,7 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
                 controller: _titleController,
                 decoration: const InputDecoration(labelText: 'Title'),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Title is required' : null,
+                autofocus: !_isEditing,
               ),
               const SizedBox(height: 16),
               TextField(

@@ -70,38 +70,37 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
                 padding: const EdgeInsets.only(right: 16),
                 child: const Icon(Icons.delete, color: Colors.white),
               ),
-              child: ListTile(
-                leading: Checkbox(
-                  value: completed,
-                  onChanged: (v) async {
-                    if (task.id == null || selectedId == null) return;
-                    await _getRepo().completeTask(selectedId, task.id!, v ?? false);
-                    await _refreshTasks();
-                  },
-                ),
-                title: Text(
-                  task.title ?? '(no title)',
-                  style: TextStyle(
-                    decoration: completed ? TextDecoration.lineThrough : null,
-                  ),
-                ),
-                subtitle: (task.notes != null && task.notes!.isNotEmpty)
-                    ? Text(task.notes!)
-                    : null,
-                trailing: IconButton(
-                  icon: const Icon(Icons.edit),
-                  onPressed: () async {
-                    if (selectedId == null) return;
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => TaskEditScreen(
-                          taskListId: selectedId,
-                          task: task,
-                        ),
+              child: InkWell(
+                onTap: () async {
+                  if (selectedId == null) return;
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => TaskEditScreen(
+                        taskListId: selectedId,
+                        task: task,
                       ),
-                    );
-                    await _refreshTasks();
-                  },
+                    ),
+                  );
+                  await _refreshTasks();
+                },
+                child: ListTile(
+                  leading: Checkbox(
+                    value: completed,
+                    onChanged: (v) async {
+                      if (task.id == null || selectedId == null) return;
+                      await _getRepo().completeTask(selectedId, task.id!, v ?? false);
+                      await _refreshTasks();
+                    },
+                  ),
+                  title: Text(
+                    task.title ?? '(no title)',
+                    style: TextStyle(
+                      decoration: completed ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
+                  subtitle: (task.notes != null && task.notes!.isNotEmpty)
+                      ? Text(task.notes!)
+                      : null,
                 ),
               ),
             );
