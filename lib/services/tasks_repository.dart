@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config.dart';
 import '../utils/google_config.dart';
+import 'widget_service.dart';
 
 class TasksRepository extends ChangeNotifier {
   final GoogleSignIn _signIn = GoogleSignIn.instance;
@@ -48,7 +49,10 @@ class TasksRepository extends ChangeNotifier {
 
   Future<void> signIn() => _signIn.authenticate();
 
-  Future<void> signOut() => _signIn.disconnect();
+  Future<void> signOut() async {
+    await _signIn.disconnect();
+    await WidgetService.clearWidget();
+  }
 
   Future<void> _checkAuthorization() async {
     final authz = await _currentUser?.authorizationClient

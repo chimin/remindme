@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_task_checkbox">#FF888888</color>
+    <color name="widget_task_completed">#9E9E9E</color>
+    <color name="widget_group_header">#8A8A8A</color>
+    <color name="widget_overdue">#F44336</color>
+</resources>

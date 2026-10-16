@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:googleapis/tasks/v1.dart';
 import 'package:provider/provider.dart';
 
+import '../models/task_item.dart';
 import '../services/tasks_repository.dart';
+import '../services/widget_service.dart';
 import '../utils/log.dart';
+import '../utils/task_grouping.dart';
 
 class TaskHomeScreen extends StatefulWidget {
   const TaskHomeScreen({super.key});
@@ -17,30 +20,6 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
   List<TaskList> _taskLists = [];
   List<Task> _tasks = [];
 
-  Map<DateTime, List<Task>> _groupTasksByDueDate() {
-    final groups = <DateTime, List<Task>>{};
-    for (final task in _tasks) {
-      final due = task.due;
-      if (due != null) {
-        final date = DateTime.tryParse(due);
-        if (date != null) {
-          final key = DateTime(date.year, date.month, date.day);
-          if (groups[key] == null) {
-            groups[key] = [];
-          }
-          groups[key]!.add(task);
-        }
-      } else {
-        final key = DateTime.now();
-        if (groups[key] == null) {
-          groups[key] = [];
-        }
-        groups[key]!.add(task);
-      }
-    }
-    return groups;
-  }
-
   TasksRepository _getRepo() => context.read<TasksRepository>();
   String? _getSelectedId() => _getRepo().selectedTasklistId;
 
@@ -50,108 +29,83 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     _loadData();
   }
 
+  List<TaskGroup> _groupTasks() =>
+      groupTasksByDueDate(_tasks, DateTime.now());
+
   Widget _buildGroupedTaskList() {
-    final repo = _getRepo();
     final selectedId = _getSelectedId();
-    final grouped = _groupTasksByDueDate();
-    
-    // Sort dates (today first, then past, then future)
-    final sortedKeys = grouped.keys.toList()
-      ..sort((a, b) {
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-        
-        final isAToday = a.isAtSameMomentAs(today);
-        final isBToday = b.isAtSameMomentAs(today);
-        if (isAToday && !isBToday) return -1;
-        if (!isAToday && isBToday) return 1;
-        
-        // Then sort by date (past first, then future)
-        if (a.isBefore(today) && b.isAfter(today)) return -1;
-        if (a.isAfter(today) && b.isBefore(today)) return 1;
-        
-        return a.compareTo(b);
-      });
-    
+    final groups = _groupTasks();
+
     return ListView(
-      children: sortedKeys.map((date) {
-        final tasks = grouped[date]!;
-        final today = DateTime.now();
-        final isToday = date.isAtSameMomentAs(DateTime(today.year, today.month, today.day));
-        final isPast = date.isBefore(today);
-        
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text(
-                isToday
-                    ? 'Today'
-                    : isPast
-                        ? 'Overdue'
-                        : '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: isPast ? Colors.red : null,
-                    ),
-              ),
+      children: groups.expand((group) {
+        final tasks = group.tasks;
+        final isPast = group.category == 'overdue';
+
+        return [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              group.title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: isPast ? Colors.red : null,
+                  ),
             ),
-            ...tasks.map((task) {
-              return Dismissible(
-                key: Key(task.id ?? 'task-${task.title.hashCode}'),
-                direction: DismissDirection.endToStart,
-                confirmDismiss: (_) async => task.id != null,
-                onDismissed: (_) async {
-                  if (task.id == null || selectedId == null) return;
-                  await repo.deleteTask(selectedId, task.id!);
-                  await _refreshTasks();
-                },
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  color: Colors.red,
-                  padding: const EdgeInsets.only(right: 16),
-                  child: const Icon(Icons.delete, color: Colors.white),
+          ),
+          ...tasks.map((task) {
+            final completed = task.status == 'completed';
+            return Dismissible(
+              key: Key(task.id ?? 'task-${task.title.hashCode}'),
+              direction: DismissDirection.endToStart,
+              confirmDismiss: (_) async => task.id != null,
+              onDismissed: (_) async {
+                if (task.id == null || selectedId == null) return;
+                await _getRepo().deleteTask(selectedId, task.id!);
+                await _refreshTasks();
+              },
+              background: Container(
+                alignment: Alignment.centerRight,
+                color: Colors.red,
+                padding: const EdgeInsets.only(right: 16),
+                child: const Icon(Icons.delete, color: Colors.white),
+              ),
+              child: ListTile(
+                leading: Checkbox(
+                  value: completed,
+                  onChanged: (v) async {
+                    if (task.id == null || selectedId == null) return;
+                    await _getRepo().completeTask(selectedId, task.id!, v ?? false);
+                    await _refreshTasks();
+                  },
                 ),
-                child: ListTile(
-                  leading: Checkbox(
-                    value: task.status == 'completed',
-                    onChanged: (v) async {
-                      if (task.id == null || selectedId == null) return;
-                      await repo.completeTask(selectedId, task.id!, v ?? false);
-                      await _refreshTasks();
-                    },
+                title: Text(
+                  task.title ?? '(no title)',
+                  style: TextStyle(
+                    decoration: completed ? TextDecoration.lineThrough : null,
                   ),
-                  title: Text(
-                    task.title ?? '(no title)',
-                    style: TextStyle(
-                      decoration: task.status == 'completed'
-                          ? TextDecoration.lineThrough
-                          : null,
-                    ),
-                  ),
-                  subtitle: (task.notes != null && task.notes!.isNotEmpty)
-                      ? Text(task.notes!)
-                      : null,
-                  trailing: IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => TaskEditScreen(
-                            taskListId: selectedId!,
-                            task: task,
-                          ),
+                ),
+                subtitle: (task.notes != null && task.notes!.isNotEmpty)
+                    ? Text(task.notes!)
+                    : null,
+                trailing: IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: () async {
+                    if (selectedId == null) return;
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => TaskEditScreen(
+                          taskListId: selectedId,
+                          task: task,
                         ),
-                      );
-                      await _refreshTasks();
-                    },
-                  ),
+                      ),
+                    );
+                    await _refreshTasks();
+                  },
                 ),
-              );
-            }).toList(),
-          ],
-        );
+              ),
+            );
+          }),
+        ];
       }).toList(),
     );
   }
@@ -192,6 +146,7 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     final tasks = await repo.getTasks(id);
     if (mounted) {
       setState(() => _tasks = tasks);
+      WidgetService.updateWidget(_tasks);
     }
   }
 
