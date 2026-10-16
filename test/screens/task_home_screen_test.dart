@@ -124,8 +124,8 @@ void main() {
       final homeResult = await captureAndCompare(
         tester,
         find.byKey(boundaryKey),
-        kHomeGoldenPath,
-        'home_screen',
+        kTaskHomeGoldenPath,
+        'task_home_screen',
       );
 
       await tester.binding.runAsync(() async {
