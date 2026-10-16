@@ -74,6 +74,8 @@ const double kGoldenDiffThreshold = 5.0;
 const String kLoginGoldenPath = 'test/screens/golden/login_screen.png';
 const String kTaskHomeGoldenPath = 'test/screens/golden/task_home_screen.png';
 const String kTaskEditGoldenPath = 'test/screens/golden/task_edit_screen.png';
+const String kSignOutDialogGoldenPath = 'test/screens/golden/sign_out_dialog.png';
+const String kDeleteCompletedDialogGoldenPath = 'test/screens/golden/delete_completed_tasks_dialog.png';
 const String kReportPath = 'test/reports/golden_comparison_report.md';
 
 Future<ui.Image> decodePng(Uint8List bytes) async {

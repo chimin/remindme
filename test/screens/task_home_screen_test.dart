@@ -144,4 +144,160 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'sign out confirmation dialog should appear when logout button is tapped',
+    (WidgetTester tester) async {
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        MethodChannel('home_widget'),
+        (_) async => null,
+      );
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      final tasks = <Task>[
+        Task(
+          id: '1',
+          title: 'Completed task',
+          status: 'completed',
+          due: today.toIso8601String(),
+        ),
+      ];
+
+      final mock = MockTasksRepository()
+        ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
+        ..mockTasks.addAll(tasks);
+
+      final boundaryKey = GlobalKey();
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<TasksRepository>.value(
+          value: mock,
+          child: RepaintBoundary(
+            key: boundaryKey,
+            child: MaterialApp(
+              theme: ThemeData(
+                colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+                useMaterial3: true,
+                fontFamily: 'Roboto',
+              ),
+              home: const AuthRouter(),
+            ),
+          ),
+        ),
+      );
+      tester.view.devicePixelRatio = 2.0;
+      tester.view.physicalSize = const Size(720, 1280);
+      await mock.init();
+      mock.signInMock(tasklistId: 'list-1');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.logout));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sign out?'), findsOneWidget);
+
+      final signOutResult = await captureAndCompare(
+        tester,
+        find.byKey(boundaryKey),
+        kSignOutDialogGoldenPath,
+        'sign_out_dialog',
+      );
+
+      await tester.binding.runAsync(() async {
+        await writeReport(
+          threshold: kGoldenDiffThreshold,
+          screenshots: <String, dynamic>{
+            'sign_out_dialog': signOutResult,
+          },
+        );
+      });
+
+      expect(
+        signOutResult['pass'] as bool,
+        isTrue,
+        reason: 'sign out dialog golden diff exceeded threshold',
+      );
+    },
+  );
+
+  testWidgets(
+    'delete completed tasks confirmation dialog should appear when delete button is tapped',
+    (WidgetTester tester) async {
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        MethodChannel('home_widget'),
+        (_) async => null,
+      );
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      final tasks = <Task>[
+        Task(
+          id: '1',
+          title: 'Completed task',
+          status: 'completed',
+          due: today.toIso8601String(),
+        ),
+      ];
+
+      final mock = MockTasksRepository()
+        ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
+        ..mockTasks.addAll(tasks);
+
+      final boundaryKey = GlobalKey();
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<TasksRepository>.value(
+          value: mock,
+          child: RepaintBoundary(
+            key: boundaryKey,
+            child: MaterialApp(
+              theme: ThemeData(
+                colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+                useMaterial3: true,
+                fontFamily: 'Roboto',
+              ),
+              home: const AuthRouter(),
+            ),
+          ),
+        ),
+      );
+      tester.view.devicePixelRatio = 2.0;
+      tester.view.physicalSize = const Size(720, 1280);
+      await mock.init();
+      mock.signInMock(tasklistId: 'list-1');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.delete_sweep));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete completed tasks?'), findsOneWidget);
+
+      final deleteResult = await captureAndCompare(
+        tester,
+        find.byKey(boundaryKey),
+        kDeleteCompletedDialogGoldenPath,
+        'delete_completed_tasks_dialog',
+      );
+
+      await tester.binding.runAsync(() async {
+        await writeReport(
+          threshold: kGoldenDiffThreshold,
+          screenshots: <String, dynamic>{
+            'delete_completed_tasks_dialog': deleteResult,
+          },
+        );
+      });
+
+      expect(
+        deleteResult['pass'] as bool,
+        isTrue,
+        reason: 'delete completed tasks dialog golden diff exceeded threshold',
+      );
+    },
+  );
 }
