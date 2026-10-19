@@ -26,6 +26,14 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>GIDClientID</key>
 	<string>YOUR_IOS_CLIENT_ID.apps.googleusercontent.com</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>remindme_sync</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

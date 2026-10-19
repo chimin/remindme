@@ -278,15 +278,21 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _tasks.isEmpty
-              ? const Center(child: Text('No tasks yet'))
-              : RefreshIndicator(
-                  onRefresh: () async {
-                    await _refreshLists();
-                    await _refreshTasks();
-                  },
-                  child: _buildGroupedTaskList(),
-                ),
+          : RefreshIndicator(
+              onRefresh: () async {
+                await _refreshLists();
+                await _refreshTasks();
+              },
+              child: _tasks.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
+                      children: const [
+                        Center(child: Text('No tasks yet')),
+                      ],
+                    )
+                  : _buildGroupedTaskList(),
+            ),
       floatingActionButton: FloatingActionButton(
         onPressed: selectedId == null
             ? null
