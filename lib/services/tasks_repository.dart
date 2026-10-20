@@ -496,8 +496,7 @@ class TasksRepository extends ChangeNotifier {
 
   /// Pushes a locally-created task to the remote API and folds the server
   /// result into the cache (used by SyncService). Does not re-add to cache.
-  Future<void> npx kilo
-  pushCreate(String tasklistId, CachedTask entry) async {
+  Future<void> pushCreate(String tasklistId, CachedTask entry) async {
     final created = await _api(() => _tasksApi!.tasks.insert(
           Task(
             title: entry.title,

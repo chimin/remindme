@@ -224,7 +224,7 @@ void main() {
   );
 
   testWidgets(
-    'delete completed tasks confirmation dialog should appear when delete button is tapped',
+    'list switcher overlay should appear below app title when app title is tapped',
     (WidgetTester tester) async {
       final messenger = tester.binding.defaultBinaryMessenger;
       messenger.setMockMethodCallHandler(
@@ -238,14 +238,15 @@ void main() {
       final tasks = <Task>[
         Task(
           id: '1',
-          title: 'Completed task',
-          status: 'completed',
+          title: 'Task',
+          status: 'needsAction',
           due: today.toIso8601String(),
         ),
       ];
 
       final mock = MockTasksRepository()
         ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
+        ..taskLists.add(TaskList(id: 'list-2', title: 'Personal'))
         ..mockTasks.addAll(tasks);
 
       final boundaryKey = GlobalKey();
@@ -272,31 +273,31 @@ void main() {
       mock.signInMock(tasklistId: 'list-1');
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.delete_sweep));
+      expect(find.text('Tasks'), findsOneWidget);
+      await tester.tap(find.text('Tasks'));
       await tester.pumpAndSettle();
+      expect(find.text('Personal'), findsOneWidget);
 
-      expect(find.text('Delete completed tasks?'), findsOneWidget);
-
-      final deleteResult = await captureAndCompare(
+      final switcherResult = await captureAndCompare(
         tester,
         find.byKey(boundaryKey),
-        kDeleteCompletedDialogGoldenPath,
-        'delete_completed_tasks_dialog',
+        kTaskHomeListSwitcherGoldenPath,
+        'task_home_screen_list_switcher',
       );
 
       await tester.binding.runAsync(() async {
         await writeReport(
           threshold: kGoldenDiffThreshold,
           screenshots: <String, dynamic>{
-            'delete_completed_tasks_dialog': deleteResult,
+            'task_home_screen_list_switcher': switcherResult,
           },
         );
       });
 
       expect(
-        deleteResult['pass'] as bool,
+        switcherResult['pass'] as bool,
         isTrue,
-        reason: 'delete completed tasks dialog golden diff exceeded threshold',
+        reason: 'list switcher golden diff exceeded threshold',
       );
     },
   );

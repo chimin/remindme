@@ -18,6 +18,7 @@ class TaskHomeScreen extends StatefulWidget {
 
 class _TaskHomeScreenState extends State<TaskHomeScreen> {
   bool _loading = false;
+  bool _showSwitcher = false;
   List<TaskList> _taskLists = [];
   List<Task> _tasks = [];
 
@@ -153,30 +154,53 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
   Future<void> _showListSwitcher() async {
     await _refreshLists();
     if (!mounted) return;
-    showModalBottomSheet(
-      context: context,
-      builder: (_) {
-        return ListView(
-          shrinkWrap: true,
-          children: _taskLists.map((list) {
-            final selected = list.id == context.read<TasksRepository>().selectedTasklistId;
-            return ListTile(
-              title: Text(list.title ?? 'Unnamed list'),
-              trailing: selected ? const Icon(Icons.check) : null,
-              onTap: () async {
-                Navigator.of(context).pop();
-                if (list.id != null) {
-                  await context.read<TasksRepository>().selectTasklist(list.id!);
-                  await _refreshTasks();
-                }
-              },
-            );
-          }).toList(),
-        );
-      },
-    );
+    setState(() => _showSwitcher = true);
   }
 
+  Widget _buildListSwitcherOverlay() {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 16.0, top: 0),
+              child: Material(
+                elevation: 4,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.5,
+                    maxWidth: 200,
+                  ),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: _taskLists.map((list) {
+                      final selected = list.id ==
+                          context.read<TasksRepository>().selectedTasklistId;
+                      return ListTile(
+                        title: Text(list.title ?? 'Unnamed list'),
+                        trailing: selected ? const Icon(Icons.check) : null,
+                        onTap: () async {
+                          setState(() => _showSwitcher = false);
+                          if (list.id != null) {
+                            await context.read<TasksRepository>().selectTasklist(list.id!);
+                            await _refreshTasks();
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   Future<void> _deleteCompletedTasks() async {
     final repo = context.read<TasksRepository>();
     final id = repo.selectedTasklistId;
@@ -257,17 +281,15 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(selectedList.title ?? 'Tasks'),
-         actions: [
+        title: InkWell(
+          onTap: () => setState(() => _showSwitcher = !_showSwitcher),
+          child: Text(selectedList.title ?? 'Tasks'),
+        ),
+        actions: [
           IconButton(
             icon: const Icon(Icons.delete_sweep),
             onPressed: _deleteCompletedTasks,
             tooltip: 'Delete completed tasks',
-          ),
-          IconButton(
-            icon: const Icon(Icons.list),
-            onPressed: _showListSwitcher,
-            tooltip: 'Switch list',
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -278,20 +300,25 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: () async {
-                await _refreshLists();
-                await _refreshTasks();
-              },
-              child: _tasks.isEmpty
-                  ? ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(16.0),
-                      children: const [
-                        Center(child: Text('No tasks yet')),
-                      ],
-                    )
-                  : _buildGroupedTaskList(),
+          : Stack(
+              children: [
+                RefreshIndicator(
+                  onRefresh: () async {
+                    await _refreshLists();
+                    await _refreshTasks();
+                  },
+                  child: _tasks.isEmpty
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(16.0),
+                          children: const [
+                            Center(child: Text('No tasks yet')),
+                          ],
+                        )
+                      : _buildGroupedTaskList(),
+                ),
+                if (_showSwitcher) _buildListSwitcherOverlay(),
+              ],
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: selectedId == null
