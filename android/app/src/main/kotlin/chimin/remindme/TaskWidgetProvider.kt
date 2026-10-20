@@ -23,7 +23,8 @@ import org.json.JSONObject
  * in Dart and stored via `home_widget`'s shared `HomeWidgetPreferences`) and
  * renders it as a list of group headers and task rows.
  *
- * Each data item is either a header (`type: "header"`, with a `category` of
+ * Each data item is either the task list title (`type: "tasklist"`, with a
+ * `title`), a group header (`type: "header"`, with a `category` of
  * "today" / "overdue" / "future") or a task (`type: "task"`, with a `title` and
  * `completed` flag). Tapping the widget opens the app.
  *
@@ -53,6 +54,14 @@ class TaskWidgetProvider : AppWidgetProvider() {
       for (i in 0 until array.length()) {
         val obj: JSONObject = array.getJSONObject(i)
         when (obj.optString("type", "")) {
+          "tasklist" -> items.add(
+            WidgetItem(
+              type = "tasklist",
+              title = obj.optString("title", ""),
+              completed = false,
+              category = "",
+            ),
+          )
           "header" -> items.add(
             WidgetItem(
               type = "header",
@@ -103,14 +112,17 @@ class TaskWidgetProvider : AppWidgetProvider() {
     pending: PendingIntent?,
   ): RemoteViews {
     val pkg = context.packageName
-    return if (item.type == "header") {
-      RemoteViews(pkg, R.layout.task_widget_group).apply {
+    return when (item.type) {
+      "tasklist" -> RemoteViews(pkg, R.layout.task_widget_title).apply {
+        setTextViewText(R.id.task_list_title, item.title)
+        if (pending != null) setOnClickPendingIntent(R.id.task_list_title, pending)
+      }
+      "header" -> RemoteViews(pkg, R.layout.task_widget_group).apply {
         setTextViewText(R.id.group_title, item.title)
         setInt(R.id.group_title, "setTextColor", headerColor(context, item.category))
         if (pending != null) setOnClickPendingIntent(R.id.group_title, pending)
       }
-    } else {
-      RemoteViews(pkg, R.layout.task_widget_item).apply {
+      else -> RemoteViews(pkg, R.layout.task_widget_item).apply {
         setTextViewText(R.id.title, item.title)
         setTextViewText(
           R.id.checkbox,
@@ -150,6 +162,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
       null
     }
     val items = if (prefs != null) loadItems(prefs) else emptyList()
+    val hasTasks = items.any { it.type == "task" }
     val pending = try {
       openAppIntent(context)
     } catch (e: Exception) {
@@ -170,7 +183,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
         }
         views.setViewVisibility(
           R.id.empty_view,
-          if (items.isEmpty()) View.VISIBLE else View.GONE,
+          if (hasTasks) View.GONE else View.VISIBLE,
         )
         if (pending != null) {
           views.setOnClickPendingIntent(R.id.widget_root, pending)

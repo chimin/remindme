@@ -18,11 +18,21 @@ class WidgetService {
   /// Serializes [tasks] into the grouped display format and pushes it to the
   /// home-screen widget, triggering a native refresh.
   ///
+  /// [taskListName] is the name of the task list the tasks belong to; when
+  /// given it is shown as the widget title.
+  ///
   /// Best-effort: platform errors (e.g. widget not registered during dev) are
   /// logged and never rethrown, so the app keeps working.
-  static Future<void> updateWidget(List<Task> tasks) async {
+  static Future<void> updateWidget(
+    List<Task> tasks, {
+    String? taskListName,
+  }) async {
     try {
-      final data = buildWidgetDisplayItems(tasks, DateTime.now());
+      final data = buildWidgetDisplayItems(
+        tasks,
+        DateTime.now(),
+        taskListName: taskListName,
+      );
       final json = jsonEncode(data);
       await HomeWidget.saveWidgetData<String>(dataKey, json);
       await HomeWidget.updateWidget(androidName: 'TaskWidgetProvider');

@@ -82,4 +82,53 @@ void main() {
     expect(overdueHeader['category'], 'overdue');
     expect(todayHeader['category'], 'today');
   });
+
+  test('buildWidgetDisplayItems should add task list name first '
+      'when task list name is given', () {
+    final now = DateTime(2026, 1, 15, 10);
+    final tasks = [Task(id: 'a', title: 'Task')];
+
+    final items = buildWidgetDisplayItems(
+      tasks,
+      now,
+      taskListName: 'Work',
+    );
+
+    expect(items.first['type'], 'tasklist');
+    expect(items.first['title'], 'Work');
+    expect(items[1]['type'], 'header');
+  });
+
+  test('buildWidgetDisplayItems should add task list name when '
+      'there are no tasks', () {
+    final items = buildWidgetDisplayItems(
+      [],
+      DateTime(2026, 1, 15, 10),
+      taskListName: 'Work',
+    );
+
+    expect(items, hasLength(1));
+    expect(items[0]['type'], 'tasklist');
+    expect(items[0]['title'], 'Work');
+  });
+
+  test('buildWidgetDisplayItems should skip task list name when '
+      'task list name is blank', () {
+    final now = DateTime(2026, 1, 15, 10);
+    final tasks = [Task(id: 'a', title: 'Task')];
+
+    final items = buildWidgetDisplayItems(tasks, now, taskListName: '   ');
+
+    expect(items.map((e) => e['type']).toList(), ['header', 'task']);
+  });
+
+  test('buildWidgetDisplayItems should skip task list name when '
+      'task list name is not given', () {
+    final now = DateTime(2026, 1, 15, 10);
+    final tasks = [Task(id: 'a', title: 'Task')];
+
+    final items = buildWidgetDisplayItems(tasks, now);
+
+    expect(items.map((e) => e['type']).toList(), ['header', 'task']);
+  });
 }

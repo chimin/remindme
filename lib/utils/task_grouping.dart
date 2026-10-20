@@ -60,16 +60,25 @@ List<TaskGroup> groupTasksByDueDate(List<Task> tasks, DateTime now) {
   return groups;
 }
 
-/// Builds a flat, JSON-serializable list of display items for the widget: a
-/// header entry per group followed by its task entries, in order.
+/// Builds a flat, JSON-serializable list of display items for the widget: the
+/// task list title (when [taskListName] is given), then a header entry per
+/// group followed by its task entries, in order.
 ///
 /// Each entry is a JSON-serializable map.
 List<Map<String, dynamic>> buildWidgetDisplayItems(
   List<Task> tasks,
-  DateTime now,
-) {
+  DateTime now, {
+  String? taskListName,
+}) {
   final groups = groupTasksByDueDate(tasks, now);
   final items = <Map<String, dynamic>>[];
+  final name = taskListName?.trim();
+  if (name != null && name.isNotEmpty) {
+    items.add({
+      'type': 'tasklist',
+      'title': name,
+    });
+  }
   for (final group in groups) {
     items.add({
       'type': 'header',

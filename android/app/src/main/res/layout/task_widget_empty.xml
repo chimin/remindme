@@ -5,4 +5,4 @@
     android:gravity="center"
     android:text="@string/task_widget_empty"
     android:textSize="14sp"
-    android:textColor="?android:attr/textColorSecondary" />
+    android:textColor="@color/widget_empty_text" />

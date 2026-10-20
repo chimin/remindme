@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     android:padding="8dp"
     android:background="#80FFFFFF">
 
@@ -15,10 +16,11 @@
     <TextView
         android:id="@+id/empty_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:gravity="center"
         android:text="@string/task_widget_empty"
         android:textSize="14sp"
-        android:textColor="#9E9E9E" />
+        android:textColor="@color/widget_empty_text" />
 
-</FrameLayout>
+</LinearLayout>

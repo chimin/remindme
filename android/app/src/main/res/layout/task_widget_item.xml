@@ -24,6 +24,6 @@
         android:layout_marginStart="8dp"
         android:layout_gravity="center_vertical"
         android:textSize="14sp"
-        android:textColor="?android:attr/textColorPrimary" />
+        android:textColor="@color/widget_task_title" />
 
 </LinearLayout>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="task_widget_label">RemindMe tasks</string>
-    <string name="task_widget_description">Shows your RemindMe tasks grouped by due date</string>
+    <string name="task_widget_description">Shows your RemindMe tasks for the selected task list, grouped by due date</string>
     <string name="task_widget_empty">No tasks yet</string>
 </resources>

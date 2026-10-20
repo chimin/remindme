@@ -34,6 +34,19 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
   List<TaskGroup> _groupTasks() =>
       groupTasksByDueDate(_tasks, DateTime.now());
 
+  /// Title of the currently selected task list, used as the widget title.
+  ///
+  /// Returns `null` when the selected list is unknown (e.g. its name has not
+  /// been loaded yet), in which case the widget shows no title.
+  String? _selectedTaskListTitle() {
+    final selectedId = _getSelectedId();
+    if (selectedId == null) return null;
+    for (final list in _taskLists) {
+      if (list.id == selectedId) return list.title;
+    }
+    return null;
+  }
+
   Widget _buildGroupedTaskList() {
     final selectedId = _getSelectedId();
     final groups = _groupTasks();
@@ -147,7 +160,10 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     final tasks = await repo.getTasks(id);
     if (mounted) {
       setState(() => _tasks = tasks);
-      WidgetService.updateWidget(_tasks);
+      WidgetService.updateWidget(
+        _tasks,
+        taskListName: _selectedTaskListTitle(),
+      );
     }
   }
 
