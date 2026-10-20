@@ -37,6 +37,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
   companion object {
     private const val TAG = "TaskWidgetProvider"
     const val DATA_KEY = "task_widget_data"
+    const val CONFIG_KEY = "task_widget_config"
   }
 
   private data class WidgetItem(
@@ -46,6 +47,26 @@ class TaskWidgetProvider : AppWidgetProvider() {
     val category: String,
   )
 
+  private data class WidgetColorConfig(
+    val textColor: Int,
+    val backgroundColor: Int,
+  )
+
+  private fun loadColorConfig(prefs: SharedPreferences?): WidgetColorConfig {
+    val defaults = WidgetColorConfig(0xFF000000.toInt(), 0x80FFFFFF.toInt())
+    if (prefs == null) return defaults
+    val raw = prefs.getString(CONFIG_KEY, null) ?: return defaults
+    return try {
+      val obj = JSONObject(raw)
+      val text = obj.optInt("textColor", defaults.textColor)
+      val bg = obj.optInt("backgroundColor", 0xFFFFFFFF.toInt())
+      val alpha = obj.optInt("backgroundAlpha", 0x80)
+      WidgetColorConfig(text, (bg and 0x00FFFFFF) or ((alpha and 0xFF) shl 24))
+    } catch (e: JSONException) {
+      Log.e(TAG, "Failed to parse widget color config, using defaults", e)
+      defaults
+    }
+  }
   private fun loadItems(prefs: SharedPreferences): List<WidgetItem> {
     val raw = prefs.getString(DATA_KEY, null) ?: return emptyList()
     return try {
@@ -110,16 +131,18 @@ class TaskWidgetProvider : AppWidgetProvider() {
     context: Context,
     item: WidgetItem,
     pending: PendingIntent?,
+    textColor: Int,
   ): RemoteViews {
     val pkg = context.packageName
     return when (item.type) {
       "tasklist" -> RemoteViews(pkg, R.layout.task_widget_title).apply {
         setTextViewText(R.id.task_list_title, item.title)
+        setInt(R.id.task_list_title, "setTextColor", textColor)
         if (pending != null) setOnClickPendingIntent(R.id.task_list_title, pending)
       }
       "header" -> RemoteViews(pkg, R.layout.task_widget_group).apply {
         setTextViewText(R.id.group_title, item.title)
-        setInt(R.id.group_title, "setTextColor", headerColor(context, item.category))
+        setInt(R.id.group_title, "setTextColor", textColor)
         if (pending != null) setOnClickPendingIntent(R.id.group_title, pending)
       }
       else -> RemoteViews(pkg, R.layout.task_widget_item).apply {
@@ -128,24 +151,28 @@ class TaskWidgetProvider : AppWidgetProvider() {
           R.id.checkbox,
           if (item.completed) "\u2713" else "\u25CB",
         )
+        setInt(R.id.checkbox, "setTextColor", textColor)
         if (item.completed) {
           setInt(
             R.id.title,
             "setTextColor",
             ContextCompat.getColor(context, R.color.widget_task_completed),
           )
+        } else {
+          setInt(R.id.title, "setTextColor", textColor)
         }
         if (pending != null) setOnClickPendingIntent(R.id.task_item_root, pending)
       }
     }
   }
 
-  private fun buildBaseViews(context: Context, pending: PendingIntent?): RemoteViews {
+  private fun buildBaseViews(context: Context, pending: PendingIntent?, colorConfig: WidgetColorConfig): RemoteViews {
     return RemoteViews(context.packageName, R.layout.task_widget).apply {
       if (pending != null) {
         setOnClickPendingIntent(R.id.widget_root, pending)
         setOnClickPendingIntent(R.id.empty_view, pending)
       }
+      setInt(R.id.widget_root, "setBackgroundColor", colorConfig.backgroundColor)
       setViewVisibility(R.id.empty_view, View.VISIBLE)
     }
   }
@@ -162,6 +189,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
       null
     }
     val items = if (prefs != null) loadItems(prefs) else emptyList()
+    val colorConfig = loadColorConfig(prefs)
     val hasTasks = items.any { it.type == "task" }
     val pending = try {
       openAppIntent(context)
@@ -172,29 +200,30 @@ class TaskWidgetProvider : AppWidgetProvider() {
 
     for (widgetId in appWidgetIds) {
       val views = RemoteViews(context.packageName, R.layout.task_widget)
-      try {
-        views.removeAllViews(R.id.container)
-        for (item in items) {
-          try {
-            views.addView(R.id.container, buildItemViews(context, item, pending))
-          } catch (e: Exception) {
-            Log.e(TAG, "Failed to render item '${item.title}', skipping", e)
-          }
-        }
-        views.setViewVisibility(
-          R.id.empty_view,
-          if (hasTasks) View.GONE else View.VISIBLE,
-        )
-        if (pending != null) {
-          views.setOnClickPendingIntent(R.id.widget_root, pending)
-          views.setOnClickPendingIntent(R.id.empty_view, pending)
-        }
-        appWidgetManager.updateAppWidget(widgetId, views)
-      } catch (e: Exception) {
-        Log.e(TAG, "Failed to update widget $widgetId, rendering fallback", e)
-        val fallback = buildBaseViews(context, pending)
-        appWidgetManager.updateAppWidget(widgetId, fallback)
-      }
+       try {
+         views.removeAllViews(R.id.container)
+         for (item in items) {
+           try {
+             views.addView(R.id.container, buildItemViews(context, item, pending, colorConfig.textColor))
+           } catch (e: Exception) {
+             Log.e(TAG, "Failed to render item '${item.title}', skipping", e)
+           }
+         }
+         views.setViewVisibility(
+           R.id.empty_view,
+           if (hasTasks) View.GONE else View.VISIBLE,
+         )
+         views.setInt(R.id.widget_root, "setBackgroundColor", colorConfig.backgroundColor)
+         if (pending != null) {
+           views.setOnClickPendingIntent(R.id.widget_root, pending)
+           views.setOnClickPendingIntent(R.id.empty_view, pending)
+         }
+         appWidgetManager.updateAppWidget(widgetId, views)
+       } catch (e: Exception) {
+         Log.e(TAG, "Failed to update widget $widgetId, rendering fallback", e)
+         val fallback = buildBaseViews(context, pending, colorConfig)
+         appWidgetManager.updateAppWidget(widgetId, fallback)
+       }
     }
   }
 }

@@ -4,10 +4,12 @@ import 'package:provider/provider.dart';
 
 import '../models/task_item.dart';
 import '../services/tasks_repository.dart';
+import '../services/widget_color_service.dart';
 import '../services/widget_service.dart';
 import '../utils/log.dart';
 import '../utils/task_grouping.dart';
 import 'task_edit_screen.dart';
+import 'widget_color_config_dialog.dart';
 
 class TaskHomeScreen extends StatefulWidget {
   const TaskHomeScreen({super.key});
@@ -217,6 +219,21 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
       ),
     );
   }
+  Future<void> _openWidgetColorConfig() async {
+    final initial = await WidgetColorService.loadConfig();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => WidgetColorConfigDialog(
+        initial: initial,
+        onSaved: (config) async {
+          await WidgetColorService.saveConfig(config);
+          await WidgetService.refreshWidget();
+        },
+      ),
+    );
+  }
+
   Future<void> _deleteCompletedTasks() async {
     final repo = context.read<TasksRepository>();
     final id = repo.selectedTasklistId;
@@ -302,6 +319,11 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
           child: Text(selectedList.title ?? 'Tasks'),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _openWidgetColorConfig,
+            tooltip: 'Widget colors',
+          ),
           IconButton(
             icon: const Icon(Icons.delete_sweep),
             onPressed: _deleteCompletedTasks,

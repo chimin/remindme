@@ -41,6 +41,17 @@ class WidgetService {
     }
   }
 
+  /// Triggers a native widget redraw without rewriting task data. Used after
+  /// color config changes so the widget re-renders with the latest saved
+  /// config.
+  static Future<void> refreshWidget() async {
+    try {
+      await HomeWidget.updateWidget(androidName: 'TaskWidgetProvider');
+    } catch (e, st) {
+      logError('Failed to refresh widget', e, st);
+    }
+  }
+
   /// Clears the widget data and triggers a refresh so it shows an empty state.
   static Future<void> clearWidget() async {
     try {
