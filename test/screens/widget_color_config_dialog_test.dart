@@ -104,6 +104,77 @@ void main() {
   );
 
   testWidgets(
+    'color picker dialog should match the golden screenshot',
+    (WidgetTester tester) async {
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        MethodChannel('home_widget'),
+        (_) async => null,
+      );
+
+      final boundaryKey = GlobalKey();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: boundaryKey,
+          child: MaterialApp(
+            theme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+              useMaterial3: true,
+              fontFamily: 'Roboto',
+            ),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => Center(
+                  child: ElevatedButton(
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => WidgetColorConfigDialog(
+                        initial: const WidgetColorConfig(),
+                        onSaved: (_) {},
+                      ),
+                    ),
+                    child: const Text('Open'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      tester.view.devicePixelRatio = 2.0;
+      tester.view.physicalSize = const Size(720, 1280);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('color_box_Text color')));
+      await tester.pumpAndSettle();
+
+      final result = await captureAndCompare(
+        tester,
+        find.byKey(boundaryKey),
+        kWidgetColorPickerDialogGoldenPath,
+        'widget_color_picker_dialog',
+      );
+
+      await tester.binding.runAsync(() async {
+        await writeReport(
+          threshold: kGoldenDiffThreshold,
+          screenshots: <String, dynamic>{
+            'widget_color_picker_dialog': result,
+          },
+        );
+      });
+
+      expect(
+        result['pass'] as bool,
+        isTrue,
+        reason: 'widget color picker dialog golden diff exceeded threshold',
+      );
+    },
+  );
+
+  testWidgets(
     'tapping save should call onSaved and pop dialog',
     (WidgetTester tester) async {
       final messenger = tester.binding.defaultBinaryMessenger;
