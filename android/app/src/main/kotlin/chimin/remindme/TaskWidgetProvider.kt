@@ -25,8 +25,8 @@ import org.json.JSONObject
  *
  * Each data item is either the task list title (`type: "tasklist"`, with a
  * `title`), a group header (`type: "header"`, with a `category` of
- * "today" / "overdue" / "future") or a task (`type: "task"`, with a `title` and
- * `completed` flag). Tapping the widget opens the app.
+ * "today" / "overdue" / "noDueDate" / "future") or a task (`type: "task"`,
+ * with a `title` and `completed` flag). Tapping the widget opens the app.
  *
  * `onUpdate` is intentionally defensive: any per-item or per-widget rendering
  * error is logged and skipped so the widget always loads (showing at least the

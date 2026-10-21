@@ -30,7 +30,8 @@ void main() {
   });
 
   testWidgets(
-    'home screen should show 6 tasks 2 overdue 2 today 2 future when signed in',
+    'home screen should show 7 tasks 2 overdue 1 no due date 2 today 2 future '
+    'when signed in',
     (WidgetTester tester) async {
       final messenger = tester.binding.defaultBinaryMessenger;
       messenger.setMockMethodCallHandler(
@@ -62,24 +63,29 @@ void main() {
         ),
         Task(
           id: '3',
+          title: 'Task without due date',
+          status: 'needsAction',
+        ),
+        Task(
+          id: '4',
           title: 'Today task 1',
           status: 'needsAction',
           due: today1.toIso8601String(),
         ),
         Task(
-          id: '4',
+          id: '5',
           title: 'Today task 2',
           status: 'completed',
           due: today2.toIso8601String(),
         ),
         Task(
-          id: '5',
+          id: '6',
           title: 'Future task 1',
           status: 'needsAction',
           due: tomorrow1.toIso8601String(),
         ),
         Task(
-          id: '6',
+          id: '7',
           title: 'Future task 2',
           status: 'needsAction',
           due: tomorrow2.toIso8601String(),
@@ -117,10 +123,24 @@ void main() {
       expect(find.text('Tasks'), findsOneWidget);
       expect(find.text('Overdue task 1'), findsOneWidget);
       expect(find.text('Overdue task 2'), findsOneWidget);
+      expect(find.text('No due date'), findsOneWidget);
+      expect(find.text('Task without due date'), findsOneWidget);
       expect(find.text('Today task 1'), findsOneWidget);
       expect(find.text('Today task 2'), findsOneWidget);
       expect(find.text('Future task 1'), findsOneWidget);
+
+      // The last task falls below the fold of the 640px tall viewport, so the
+      // list has to be scrolled before it is built and can be asserted.
+      final scrollable = tester.state<ScrollableState>(
+        find.byType(Scrollable).first,
+      );
+      scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+      await tester.pumpAndSettle();
       expect(find.text('Future task 2'), findsOneWidget);
+
+      // Scroll back to the top so the golden shows the whole list header.
+      scrollable.position.jumpTo(0);
+      await tester.pumpAndSettle();
 
       final homeResult = await captureAndCompare(
         tester,

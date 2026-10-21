@@ -65,7 +65,7 @@ class TaskItem {
 }
 
 /// A group of tasks sharing the same due date, ready to be displayed with a
-/// section header (Today / Overdue / a specific date).
+/// section header (Overdue / No due date / Today / a specific date).
 class TaskGroup {
   TaskGroup({
     required this.title,
@@ -73,11 +73,11 @@ class TaskGroup {
     required this.tasks,
   });
 
-  /// Human readable header: "Today", "Overdue" or "YYYY-MM-DD".
+  /// Human readable header: "Overdue", "No due date", "Today" or "YYYY-MM-DD".
   final String title;
 
-  /// Machine readable category: "today", "overdue" or "future". Used by the
-  /// widget to pick header colors.
+  /// Machine readable category: "overdue", "noDueDate", "today" or "future". Used by
+  /// the widget to pick header colors.
   final String category;
 
   /// The original [Task] objects in this group, preserved so the screen can

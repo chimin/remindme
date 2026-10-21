@@ -3,11 +3,11 @@ import 'package:googleapis/tasks/v1.dart';
 import '../models/task_item.dart';
 
 /// Groups [tasks] by due date, exactly like the app's task home screen, and
-/// returns the groups in display order (Overdue, Today, future).
+/// returns the groups in display order (Overdue, No due date, Today, future).
 ///
 /// All overdue tasks are combined under a single "Overdue" group regardless of
-/// their exact due date. Tasks without a due date are placed in the "Today"
-/// group, matching the app's existing behavior.
+/// their exact due date. Tasks without a due date are placed in a dedicated
+/// "No due date" group.
 ///
 /// When [showCompleted] is false, completed tasks are left out entirely and
 /// groups that only contained completed tasks are dropped.
@@ -19,6 +19,7 @@ List<TaskGroup> groupTasksByDueDate(
   final today = DateTime(now.year, now.month, now.day);
 
   final overdueTasks = <Task>[];
+  final noDueDateTasks = <Task>[];
   final todayTasks = <Task>[];
   final futureTasks = <DateTime, List<Task>>{};
 
@@ -32,14 +33,15 @@ List<TaskGroup> groupTasksByDueDate(
         date = DateTime(parsed.year, parsed.month, parsed.day);
       }
     }
-    // Tasks without a due date fall into the Today bucket.
-    final key = date ?? today;
-    if (key.isBefore(today)) {
+    // Tasks without a due date (or with an unparseable one) get their own group.
+    if (date == null) {
+      noDueDateTasks.add(task);
+    } else if (date.isBefore(today)) {
       overdueTasks.add(task);
-    } else if (key.isAtSameMomentAs(today)) {
+    } else if (date.isAtSameMomentAs(today)) {
       todayTasks.add(task);
     } else {
-      futureTasks.putIfAbsent(key, () => <Task>[]).add(task);
+      futureTasks.putIfAbsent(date, () => <Task>[]).add(task);
     }
   }
 
@@ -47,6 +49,15 @@ List<TaskGroup> groupTasksByDueDate(
   if (overdueTasks.isNotEmpty) {
     groups.add(
       TaskGroup(title: 'Overdue', category: 'overdue', tasks: overdueTasks),
+    );
+  }
+  if (noDueDateTasks.isNotEmpty) {
+    groups.add(
+      TaskGroup(
+        title: 'No due date',
+        category: 'noDueDate',
+        tasks: noDueDateTasks,
+      ),
     );
   }
   if (todayTasks.isNotEmpty) {
