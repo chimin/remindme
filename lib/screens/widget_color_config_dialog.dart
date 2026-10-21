@@ -1,17 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../models/widget_color_config.dart';
+import '../widgets/color_picker.dart';
 
-const _swatches = <int>[
-  0xFF000000,
-  0xFFFFFFFF,
-  0xFF2196F3,
-  0xFF4CAF50,
-  0xFFF44336,
-  0xFFFF9800,
-  0xFF9C27B0,
-];
-
+/// Dialog that lets the user configure the home-screen widget colors.
+///
+/// Three colors can be configured: the task text color, the widget background
+/// color and the color of the "Overdue" group title. The background
+/// transparency is controlled by a separate slider.
 class WidgetColorConfigDialog extends StatefulWidget {
   const WidgetColorConfigDialog({
     super.key,
@@ -35,6 +31,19 @@ class _WidgetColorConfigDialogState extends State<WidgetColorConfigDialog> {
     _config = widget.initial;
   }
 
+  Future<void> _pickColor({
+    required String title,
+    required int current,
+    required ValueChanged<int> onPicked,
+  }) async {
+    final picked = await showDialog<int>(
+      context: context,
+      builder: (context) => _ColorPickerDialog(title: title, color: current),
+    );
+    if (picked == null) return;
+    onPicked(picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -44,24 +53,54 @@ class _WidgetColorConfigDialogState extends State<WidgetColorConfigDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Text color'),
-            _swatchRow(
-              selected: _config.textColor,
-              onSelect: (c) => setState(() => _config = _config.copyWith(textColor: c)),
+            _ColorRow(
+              label: 'Text color',
+              color: _config.textColor,
+              onPick: () => _pickColor(
+                title: 'Text color',
+                current: _config.textColor,
+                onPicked: (c) => setState(
+                  () => _config = _config.copyWith(textColor: c),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
-            const Text('Background color'),
-            _swatchRow(
-              selected: _config.backgroundColor,
-              onSelect: (c) => setState(() => _config = _config.copyWith(backgroundColor: c)),
+            _ColorRow(
+              label: 'Overdue title color',
+              color: _config.overdueColor,
+              onPick: () => _pickColor(
+                title: 'Overdue title color',
+                current: _config.overdueColor,
+                onPicked: (c) => setState(
+                  () => _config = _config.copyWith(overdueColor: c),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
-            Text('Transparency: ${((1 - _config.backgroundAlpha / 255) * 100).round()}%'),
+            _ColorRow(
+              label: 'Background color',
+              color: _config.backgroundColor,
+              alpha: _config.backgroundAlpha,
+              onPick: () => _pickColor(
+                title: 'Background color',
+                current: _config.backgroundColor,
+                onPicked: (c) => setState(
+                  () => _config = _config.copyWith(backgroundColor: c),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Transparency: '
+              '${((1 - _config.backgroundAlpha / 255) * 100).round()}%',
+            ),
             Slider(
               value: _config.backgroundAlpha.toDouble(),
               min: 0,
               max: 255,
-              onChanged: (v) => setState(() => _config = _config.copyWith(backgroundAlpha: v.round())),
+              onChanged: (v) => setState(
+                () => _config = _config.copyWith(backgroundAlpha: v.round()),
+              ),
             ),
           ],
         ),
@@ -81,27 +120,85 @@ class _WidgetColorConfigDialogState extends State<WidgetColorConfigDialog> {
       ],
     );
   }
+}
 
-  Widget _swatchRow({required int selected, required ValueChanged<int> onSelect}) {
-    return Wrap(
-      spacing: 8,
-      children: _swatches.map((c) {
-        return GestureDetector(
-          onTap: () => onSelect(c),
+class _ColorRow extends StatelessWidget {
+  const _ColorRow({
+    required this.label,
+    required this.color,
+    required this.onPick,
+    this.alpha,
+  });
+
+  final String label;
+  final int color;
+  final int? alpha;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = Color(color);
+    final preview = alpha == null
+        ? value
+        : value.withValues(alpha: alpha! / 255);
+    return Row(
+      children: [
+        Expanded(child: Text(label)),
+        GestureDetector(
+          key: ValueKey('color_box_$label'),
+          onTap: onPick,
           child: Container(
-            width: 28,
-            height: 28,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
-              color: Color(c),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: selected == c ? Colors.blue : Colors.grey,
-                width: selected == c ? 3 : 1,
-              ),
+              color: preview,
+              border: Border.all(color: Colors.grey),
+              borderRadius: BorderRadius.circular(4),
             ),
           ),
-        );
-      }).toList(),
+        ),
+      ],
+    );
+  }
+}
+
+/// Dialog wrapping [ColorPicker] that returns the picked color.
+class _ColorPickerDialog extends StatefulWidget {
+  const _ColorPickerDialog({required this.title, required this.color});
+
+  final String title;
+  final int color;
+
+  @override
+  State<_ColorPickerDialog> createState() => _ColorPickerDialogState();
+}
+
+class _ColorPickerDialogState extends State<_ColorPickerDialog> {
+  late Color _color = Color(widget.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: 320,
+        child: SingleChildScrollView(
+          child: ColorPicker(
+            color: _color,
+            onChanged: (c) => setState(() => _color = c),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(_color.toARGB32()),
+          child: const Text('OK'),
+        ),
+      ],
     );
   }
 }
