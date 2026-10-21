@@ -131,4 +131,82 @@ void main() {
 
     expect(items.map((e) => e['type']).toList(), ['header', 'task']);
   });
+
+  test('buildWidgetDisplayItems should exclude completed tasks', () {
+    final now = DateTime(2026, 1, 15, 10);
+    final tasks = [
+      Task(id: 'a', title: 'Open task', due: '2026-01-15'),
+      Task(id: 'b', title: 'Done task', status: 'completed', due: '2026-01-15'),
+    ];
+
+    final items = buildWidgetDisplayItems(tasks, now);
+
+    expect(items.map((e) => e['type']).toList(), ['header', 'task']);
+    expect(items[1]['title'], 'Open task');
+  });
+
+  test('buildWidgetDisplayItems should drop groups with only completed tasks',
+      () {
+    final now = DateTime(2026, 1, 15, 10);
+    final tasks = [
+      Task(id: 'a', title: 'Open today', due: '2026-01-15'),
+      Task(
+        id: 'b',
+        title: 'Done tomorrow',
+        status: 'completed',
+        due: '2026-01-16',
+      ),
+    ];
+
+    final items = buildWidgetDisplayItems(tasks, now);
+
+    expect(items.map((e) => e['title']).toList(), ['Today', 'Open today']);
+  });
+
+  test('groupTasksByDueDate should include completed tasks by default', () {
+    final now = DateTime(2026, 1, 15, 10);
+    final tasks = [
+      Task(id: 'a', title: 'Open task', due: '2026-01-15'),
+      Task(id: 'b', title: 'Done task', status: 'completed', due: '2026-01-15'),
+    ];
+
+    final groups = groupTasksByDueDate(tasks, now);
+
+    expect(groups, hasLength(1));
+    expect(groups.first.tasks, hasLength(2));
+  });
+
+  test('groupTasksByDueDate should exclude completed tasks when '
+      'showCompleted is false', () {
+    final now = DateTime(2026, 1, 15, 10);
+    final tasks = [
+      Task(id: 'a', title: 'Open task', due: '2026-01-15'),
+      Task(id: 'b', title: 'Done task', status: 'completed', due: '2026-01-15'),
+    ];
+
+    final groups = groupTasksByDueDate(tasks, now, showCompleted: false);
+
+    expect(groups, hasLength(1));
+    expect(groups.first.tasks, hasLength(1));
+    expect(groups.first.tasks.first.title, 'Open task');
+  });
+
+  test('groupTasksByDueDate should drop groups with only completed tasks '
+      'when showCompleted is false', () {
+    final now = DateTime(2026, 1, 15, 10);
+    final tasks = [
+      Task(id: 'a', title: 'Open today', due: '2026-01-15'),
+      Task(
+        id: 'b',
+        title: 'Done tomorrow',
+        status: 'completed',
+        due: '2026-01-16',
+      ),
+    ];
+
+    final groups = groupTasksByDueDate(tasks, now, showCompleted: false);
+
+    expect(groups, hasLength(1));
+    expect(groups.first.title, 'Today');
+  });
 }

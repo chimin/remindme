@@ -8,7 +8,14 @@ import '../models/task_item.dart';
 /// All overdue tasks are combined under a single "Overdue" group regardless of
 /// their exact due date. Tasks without a due date are placed in the "Today"
 /// group, matching the app's existing behavior.
-List<TaskGroup> groupTasksByDueDate(List<Task> tasks, DateTime now) {
+///
+/// When [showCompleted] is false, completed tasks are left out entirely and
+/// groups that only contained completed tasks are dropped.
+List<TaskGroup> groupTasksByDueDate(
+  List<Task> tasks,
+  DateTime now, {
+  bool showCompleted = true,
+}) {
   final today = DateTime(now.year, now.month, now.day);
 
   final overdueTasks = <Task>[];
@@ -16,6 +23,7 @@ List<TaskGroup> groupTasksByDueDate(List<Task> tasks, DateTime now) {
   final futureTasks = <DateTime, List<Task>>{};
 
   for (final task in tasks) {
+    if (!showCompleted && task.status == 'completed') continue;
     DateTime? date;
     final due = task.due;
     if (due != null) {
@@ -64,13 +72,16 @@ List<TaskGroup> groupTasksByDueDate(List<Task> tasks, DateTime now) {
 /// task list title (when [taskListName] is given), then a header entry per
 /// group followed by its task entries, in order.
 ///
+/// Completed tasks are never included: the home-screen widget only shows
+/// outstanding items.
+///
 /// Each entry is a JSON-serializable map.
 List<Map<String, dynamic>> buildWidgetDisplayItems(
   List<Task> tasks,
   DateTime now, {
   String? taskListName,
 }) {
-  final groups = groupTasksByDueDate(tasks, now);
+  final groups = groupTasksByDueDate(tasks, now, showCompleted: false);
   final items = <Map<String, dynamic>>[];
   final name = taskListName?.trim();
   if (name != null && name.isNotEmpty) {

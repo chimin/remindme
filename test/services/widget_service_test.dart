@@ -79,4 +79,26 @@ void main() {
     expect(args['id'], WidgetService.dataKey);
     expect(args['data'], isNull);
   });
+
+  test('updateWidget should exclude completed tasks when saving widget data',
+      () async {
+    final now = DateTime.now();
+    await WidgetService.updateWidget([
+      Task(id: '1', title: 'Open task', due: now.toIso8601String()),
+      Task(
+        id: '2',
+        title: 'Done task',
+        status: 'completed',
+        due: now.toIso8601String(),
+      ),
+    ]);
+
+    final items = savedWidgetData();
+    final titles = items
+        .whereType<Map>()
+        .where((e) => e['type'] == 'task')
+        .map((e) => e['title'])
+        .toList();
+    expect(titles, ['Open task']);
+  });
 }

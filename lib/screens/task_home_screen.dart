@@ -8,9 +8,32 @@ import '../services/widget_color_service.dart';
 import '../services/widget_service.dart';
 import '../utils/log.dart';
 import '../utils/task_grouping.dart';
+import '../widgets/trailing_checked_menu_item.dart';
 import 'task_edit_screen.dart';
 import 'widget_color_config_dialog.dart';
 
+/// Actions available from the app bar overflow menu.
+enum _AppBarAction { toggleCompleted, widgetColors, deleteCompleted, signOut }
+
+/// Vertical nudge applied to the overflow menu so its top edge lines up with
+/// the top edge of the task list menu.
+///
+/// The overflow button is a 48px icon button whose icon is centred in the
+/// toolbar, while the title button only wraps the title line, so anchoring
+/// both menus with [PopupMenuPosition.under] leaves them 2px apart.
+const double _kOverflowMenuOffset = -2;
+
+/// Home screen listing the tasks of the selected Google task list.
+///
+/// The app bar exposes two Material popup menus that share the same styling:
+/// the title acts as a task list switcher (a [PopupMenuButton] with a
+/// dropdown indicator) and the overflow button holds the app wide actions.
+/// Both menus render their entries as [TrailingCheckedMenuItem]s so the active
+/// choice is marked with a checkmark on the right.
+///
+/// Only one popup can be visible at a time because every Material popup menu
+/// is pushed as a modal route whose barrier swallows taps aimed at the
+/// underlying screen.
 class TaskHomeScreen extends StatefulWidget {
   const TaskHomeScreen({super.key});
 
@@ -20,7 +43,6 @@ class TaskHomeScreen extends StatefulWidget {
 
 class _TaskHomeScreenState extends State<TaskHomeScreen> {
   bool _loading = false;
-  bool _showSwitcher = false;
   List<TaskList> _taskLists = [];
   List<Task> _tasks = [];
 
@@ -33,8 +55,8 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     _loadData();
   }
 
-  List<TaskGroup> _groupTasks() =>
-      groupTasksByDueDate(_tasks, DateTime.now());
+  List<TaskGroup> _groupTasks({required bool showCompleted}) =>
+      groupTasksByDueDate(_tasks, DateTime.now(), showCompleted: showCompleted);
 
   /// Title of the currently selected task list, used as the widget title.
   ///
@@ -49,9 +71,8 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     return null;
   }
 
-  Widget _buildGroupedTaskList() {
+  Widget _buildGroupedTaskList({required List<TaskGroup> groups}) {
     final selectedId = _getSelectedId();
-    final groups = _groupTasks();
 
     return ListView(
       children: groups.expand((group) {
@@ -169,56 +190,32 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     }
   }
 
-  Future<void> _showListSwitcher() async {
-    await _refreshLists();
-    if (!mounted) return;
-    setState(() => _showSwitcher = true);
+  /// Builds the task list popup shown under the app bar title.
+  ///
+  /// Every entry is a [TrailingCheckedMenuItem] so the selected list is marked
+  /// with a checkmark on the right, matching the app bar overflow menu.
+  List<PopupMenuEntry<String>> _buildTaskListMenu(String? selectedId) {
+    final items = <PopupMenuEntry<String>>[];
+    for (final list in _taskLists) {
+      final id = list.id;
+      if (id == null) continue;
+      items.add(
+        TrailingCheckedMenuItem<String>(
+          value: id,
+          label: list.title ?? 'Unnamed list',
+          checked: id == selectedId,
+        ),
+      );
+    }
+    return items;
   }
 
-  Widget _buildListSwitcherOverlay() {
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 16.0, top: 0),
-              child: Material(
-                elevation: 4,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.5,
-                    maxWidth: 200,
-                  ),
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: _taskLists.map((list) {
-                      final selected = list.id ==
-                          context.read<TasksRepository>().selectedTasklistId;
-                      return ListTile(
-                        title: Text(list.title ?? 'Unnamed list'),
-                        trailing: selected ? const Icon(Icons.check) : null,
-                        onTap: () async {
-                          setState(() => _showSwitcher = false);
-                          if (list.id != null) {
-                            await context.read<TasksRepository>().selectTasklist(list.id!);
-                            await _refreshTasks();
-                          }
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  /// Switches to the task list chosen from the title popup.
+  Future<void> _handleTaskListSelected(String taskListId) async {
+    await _getRepo().selectTasklist(taskListId);
+    await _refreshTasks();
   }
+
   Future<void> _openWidgetColorConfig() async {
     final initial = await WidgetColorService.loadConfig();
     if (!mounted) return;
@@ -232,6 +229,23 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _handleAppBarAction(_AppBarAction action) async {
+    switch (action) {
+      case _AppBarAction.toggleCompleted:
+        await _getRepo().setShowCompleted(!_getRepo().showCompleted);
+        break;
+      case _AppBarAction.widgetColors:
+        await _openWidgetColorConfig();
+        break;
+      case _AppBarAction.deleteCompleted:
+        await _deleteCompletedTasks();
+        break;
+      case _AppBarAction.signOut:
+        await _signOut();
+        break;
+    }
   }
 
   Future<void> _deleteCompletedTasks() async {
@@ -311,52 +325,73 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
       (l) => l.id == selectedId,
       orElse: () => TaskList(title: 'Tasks'),
     );
+    final groups = _groupTasks(showCompleted: repo.showCompleted);
+    final hasVisibleTasks = groups.any((g) => g.tasks.isNotEmpty);
 
     return Scaffold(
       appBar: AppBar(
-        title: InkWell(
-          onTap: () => setState(() => _showSwitcher = !_showSwitcher),
-          child: Text(selectedList.title ?? 'Tasks'),
+        title: PopupMenuButton<String>(
+          position: PopupMenuPosition.under,
+          tooltip: 'Change task list',
+          onOpened: () {
+            _refreshLists();
+          },
+          onSelected: _handleTaskListSelected,
+          itemBuilder: (context) => _buildTaskListMenu(selectedId),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(selectedList.title ?? 'Tasks'),
+              const Icon(Icons.arrow_drop_down),
+            ],
+          ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _openWidgetColorConfig,
-            tooltip: 'Widget colors',
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_sweep),
-            onPressed: _deleteCompletedTasks,
-            tooltip: 'Delete completed tasks',
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _signOut,
-            tooltip: 'Sign out',
+          PopupMenuButton<_AppBarAction>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'Menu',
+            position: PopupMenuPosition.under,
+            offset: const Offset(0, _kOverflowMenuOffset),
+            onSelected: _handleAppBarAction,
+            itemBuilder: (context) => [
+              TrailingCheckedMenuItem<_AppBarAction>(
+                value: _AppBarAction.toggleCompleted,
+                label: 'Show completed tasks',
+                checked: repo.showCompleted,
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: _AppBarAction.widgetColors,
+                child: Text('Widget colors'),
+              ),
+              const PopupMenuItem(
+                value: _AppBarAction.deleteCompleted,
+                child: Text('Delete completed tasks'),
+              ),
+              const PopupMenuItem(
+                value: _AppBarAction.signOut,
+                child: Text('Sign out'),
+              ),
+            ],
           ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Stack(
-              children: [
-                RefreshIndicator(
-                  onRefresh: () async {
-                    await _refreshLists();
-                    await _refreshTasks();
-                  },
-                  child: _tasks.isEmpty
-                      ? ListView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.all(16.0),
-                          children: const [
-                            Center(child: Text('No tasks yet')),
-                          ],
-                        )
-                      : _buildGroupedTaskList(),
-                ),
-                if (_showSwitcher) _buildListSwitcherOverlay(),
-              ],
+          : RefreshIndicator(
+              onRefresh: () async {
+                await _refreshLists();
+                await _refreshTasks();
+              },
+              child: hasVisibleTasks
+                  ? _buildGroupedTaskList(groups: groups)
+                  : ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
+                      children: const [
+                        Center(child: Text('No tasks yet')),
+                      ],
+                    ),
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: selectedId == null

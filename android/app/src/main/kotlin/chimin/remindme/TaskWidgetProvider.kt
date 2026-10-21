@@ -101,14 +101,20 @@ class TaskWidgetProvider : AppWidgetProvider() {
               category = obj.optString("category", ""),
             ),
           )
-          "task" -> items.add(
-            WidgetItem(
-              type = "task",
-              title = obj.optString("title", "(no title)"),
-              completed = obj.optBoolean("completed", false),
-              category = "",
-            ),
-          )
+          "task" -> {
+            // The widget only shows outstanding items; completed tasks are
+            // skipped even if the stored snapshot still contains them.
+            if (!obj.optBoolean("completed", false)) {
+              items.add(
+                WidgetItem(
+                  type = "task",
+                  title = obj.optString("title", "(no title)"),
+                  completed = false,
+                  category = "",
+                ),
+              )
+            }
+          }
         }
       }
       items

@@ -262,6 +262,7 @@ class TasksRepository extends ChangeNotifier {
       notifyListeners();
     });
     await _loadSelectedTasklist();
+    await _loadShowCompleted();
   }
 
   Future<void> signIn() => _signIn.authenticate();
@@ -304,6 +305,29 @@ class TasksRepository extends ChangeNotifier {
   static const _kPrefKey = 'remindme_tasklist_id';
   String? _selectedTasklistId;
   String? get selectedTasklistId => _selectedTasklistId;
+
+  static const _kShowCompletedPrefKey = 'remindme_show_completed';
+  bool _showCompleted = true;
+
+  /// Whether completed tasks are listed on the app's task screen.
+  ///
+  /// The home-screen widget always shows outstanding items only, regardless of
+  /// this setting.
+  bool get showCompleted => _showCompleted;
+
+  Future<void> _loadShowCompleted() async {
+    final prefs = await SharedPreferences.getInstance();
+    _showCompleted = prefs.getBool(_kShowCompletedPrefKey) ?? true;
+  }
+
+  /// Shows or hides completed tasks on the app's task screen and persists the
+  /// choice.
+  Future<void> setShowCompleted(bool value) async {
+    _showCompleted = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kShowCompletedPrefKey, value);
+    notifyListeners();
+  }
 
   Future<void> _loadSelectedTasklist() async {
     final prefs = await SharedPreferences.getInstance();

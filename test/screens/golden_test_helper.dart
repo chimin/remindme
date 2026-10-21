@@ -11,6 +11,7 @@ import 'package:remindme/services/tasks_repository.dart';
 class MockTasksRepository extends TasksRepository {
   bool _signedIn = false;
   String? _selectedTasklistId;
+  bool _mockShowCompleted = true;
   final List<TaskList> taskLists = <TaskList>[];
   final List<Task> mockTasks = <Task>[];
 
@@ -19,6 +20,15 @@ class MockTasksRepository extends TasksRepository {
 
   @override
   String? get selectedTasklistId => _selectedTasklistId;
+
+  @override
+  bool get showCompleted => _mockShowCompleted;
+
+  @override
+  Future<void> setShowCompleted(bool value) async {
+    _mockShowCompleted = value;
+    notifyListeners();
+  }
 
   @override
   Future<void> init() async {
@@ -81,6 +91,8 @@ const String kWidgetColorConfigGoldenPath =
     'test/screens/golden/widget_color_config_dialog.png';
 const String kWidgetColorPickerDialogGoldenPath =
     'test/screens/golden/widget_color_picker_dialog.png';
+const String kTaskHomeMenuGoldenPath =
+    'test/screens/golden/task_home_screen_menu.png';
 const String kReportPath = 'test/reports/golden_comparison_report.md';
 
 Future<ui.Image> decodePng(Uint8List bytes) async {
