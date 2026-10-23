@@ -147,6 +147,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
       "tasklist" -> RemoteViews(pkg, R.layout.task_widget_title).apply {
         setTextViewText(R.id.task_list_title, item.title)
         setInt(R.id.task_list_title, "setTextColor", colorConfig.textColor)
+        setInt(R.id.task_list_title, "setBackgroundColor", colorConfig.backgroundColor)
         if (pending != null) setOnClickPendingIntent(R.id.task_list_title, pending)
       }
       "header" -> RemoteViews(pkg, R.layout.task_widget_group).apply {
@@ -161,6 +162,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
           },
         )
         if (pending != null) setOnClickPendingIntent(R.id.group_title, pending)
+        setInt(R.id.group_title, "setBackgroundColor", colorConfig.backgroundColor)
       }
       else -> RemoteViews(pkg, R.layout.task_widget_item).apply {
         setTextViewText(R.id.title, item.title)
@@ -178,6 +180,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
         } else {
           setInt(R.id.title, "setTextColor", colorConfig.textColor)
         }
+        setInt(R.id.task_item_root, "setBackgroundColor", colorConfig.backgroundColor)
         if (pending != null) setOnClickPendingIntent(R.id.task_item_root, pending)
       }
     }
@@ -189,8 +192,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
         setOnClickPendingIntent(R.id.widget_root, pending)
         setOnClickPendingIntent(R.id.empty_view, pending)
       }
-      setInt(R.id.widget_root, "setBackgroundColor", colorConfig.backgroundColor)
       setInt(R.id.empty_view, "setTextColor", colorConfig.textColor)
+      setInt(R.id.empty_view, "setBackgroundColor", colorConfig.backgroundColor)
       setViewVisibility(R.id.empty_view, View.VISIBLE)
     }
   }
@@ -232,7 +235,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
           if (hasTasks) View.GONE else View.VISIBLE,
         )
         views.setInt(R.id.empty_view, "setTextColor", colorConfig.textColor)
-        views.setInt(R.id.widget_root, "setBackgroundColor", colorConfig.backgroundColor)
+        views.setInt(R.id.empty_view, "setBackgroundColor", colorConfig.backgroundColor)
         if (pending != null) {
           views.setOnClickPendingIntent(R.id.widget_root, pending)
           views.setOnClickPendingIntent(R.id.empty_view, pending)

@@ -1,12 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/task_list_title"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingStart="8dp"
-    android:paddingEnd="8dp"
-    android:paddingTop="2dp"
-    android:paddingBottom="6dp"
-    android:textSize="18sp"
-    android:textColor="@color/widget_task_list_title"
-    android:textStyle="bold" />
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/task_list_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="6dp"
+        android:textSize="18sp"
+        android:textColor="@color/widget_task_list_title"
+        android:textStyle="bold" />
+
+    <FrameLayout
+        android:id="@+id/task_list_gap"
+        android:layout_width="match_parent"
+        android:layout_height="2dp" />
+
+</LinearLayout>

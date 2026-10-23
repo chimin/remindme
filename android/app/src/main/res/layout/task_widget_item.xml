@@ -6,7 +6,8 @@
     android:orientation="horizontal"
     android:paddingStart="4dp"
     android:paddingEnd="4dp"
-    android:gravity="center_vertical">
+    android:gravity="center_vertical"
+    android:background="@color/widget_task_item_background">
 
     <TextView
         android:id="@+id/checkbox"

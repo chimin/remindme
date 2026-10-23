@@ -194,6 +194,14 @@ abstract class WidgetScreenshotTask : DefaultTask() {
                 .forEach { it.copyTo(File(testDir, it.name), overwrite = true); it.delete() }
             nested.deleteRecursively()
         }
+        // Also pull the home screen screenshot captured by HomeScreenWidgetTest
+        // which saves to public Pictures directory.
+        project.exec {
+            commandLine(adb, "-s", serial, "pull",
+                "/sdcard/Pictures/home_screen_widget.png",
+                File(testDir, "home_screen_widget.png").absolutePath)
+            isIgnoreExitValue = true
+        }
         val pulled = testDir.walkTopDown()
             .filter { it.isFile && it.extension.equals("png", ignoreCase = true) }
             .count()
