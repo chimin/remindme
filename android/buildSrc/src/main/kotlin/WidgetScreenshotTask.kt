@@ -11,14 +11,11 @@ import java.io.File
  *   3. Select an emulator serial from `adb devices` (filters `emulator-*` lines
  *      so a connected physical phone is never targeted).
  *   4. Wait for `sys.boot_completed` to become `1`.
- *   5. Run `:app:connectedAndroidTest` with `ANDROID_SERIAL` set so Gradle
- *      targets only the emulator (avoids `INSTALL_FAILED_USER_RESTRICTED`).
- *   6. Pull `/sdcard/Download/test_output` into `android/app/test/screenshots`.
+ *   5. Install app and test APKs on the emulator.
+ *   6. Run `am instrument` to capture widget screenshots.
+ *   7. Pull screenshots from app-specific external storage into `android/app/test/screenshots`.
  */
 abstract class WidgetScreenshotTask : DefaultTask() {
-
-    @get:Input
-    var updateGoldens: Boolean = false
 
     @get:Input
     var skipBootWait: Boolean = false
@@ -37,7 +34,7 @@ abstract class WidgetScreenshotTask : DefaultTask() {
         if (!skipBootWait) {
             waitUntilBooted(adb, serial)
         }
-        runTests(serial)
+        runTests(serial, adb)
         pullScreenshots(adb, serial)
     }
 
@@ -131,21 +128,49 @@ abstract class WidgetScreenshotTask : DefaultTask() {
         error("Timed out waiting for emulator $serial to boot.")
     }
 
-    private fun runTests(serial: String) {
+    /**
+     * Install the app and test APKs via adb targeting only the emulator serial.
+     * Gradle's own `installDebug`/`installDebugAndroidTest` tasks install on
+     * every connected device, which fails on a physically attached phone
+     * (INSTALL_FAILED_USER_RESTRICTED).
+     */
+    private fun installApks(adb: String, serial: String) {
+        val appDir = File(project.rootProject.buildDir, "app/outputs/apk")
+        val appApk = appDir.resolve("debug/app-debug.apk")
+        val testApk = appDir.resolve("androidTest/debug/app-debug-androidTest.apk")
+        for (apk in listOf(appApk, testApk)) {
+            if (!apk.exists()) {
+                error("APK not found: ${apk.absolutePath}. Build it first (assembleDebug / assembleDebugAndroidTest).")
+            }
+            val result = project.exec {
+                commandLine(adb, "-s", serial, "install", "-r", apk.absolutePath)
+                isIgnoreExitValue = true
+            }
+            if (result.exitValue != 0) {
+                error("Failed to install ${apk.name}: exit ${result.exitValue}")
+            }
+        }
+    }
+
+    private fun runTests(serial: String, adb: String) {
+        installApks(adb, serial)
         val testDir = File(project.projectDir, "app/test/screenshots")
         if (testDir.exists()) testDir.deleteRecursively()
         testDir.mkdirs()
-        val env = mutableMapOf("ANDROID_SERIAL" to serial)
-        if (updateGoldens) env["org.gradle.project.updateGoldens"] = "true"
-        val gradlew = if (isWindows()) "gradlew.bat" else "./gradlew"
+        // Clear stale screenshots from external storage before running.
+        project.exec {
+            commandLine(adb, "-s", serial, "shell", "rm -rf /sdcard/Android/data/chimin.remindme/files/test_output")
+            isIgnoreExitValue = true
+        }
+        // Run the test APK directly via am instrument so the app stays installed
+        // (connectedAndroidTest uninstalls the app afterwards, which breaks pull).
         val result = project.exec {
-            commandLine(gradlew, ":app:connectedAndroidTest")
-            workingDir = project.projectDir
-            environment(env)
+            commandLine(adb, "-s", serial, "shell",
+                "am instrument -w chimin.remindme.test/androidx.test.runner.AndroidJUnitRunner")
             isIgnoreExitValue = true
         }
         if (result.exitValue != 0) {
-            error(":app:connectedAndroidTest failed with exit code ${result.exitValue}.")
+            error("am instrument failed with exit code ${result.exitValue}.")
         }
     }
 
@@ -153,8 +178,12 @@ abstract class WidgetScreenshotTask : DefaultTask() {
         val testDir = File(project.projectDir, "app/test/screenshots")
         if (testDir.exists()) testDir.deleteRecursively()
         testDir.mkdirs()
+        // Screenshots are written to app-specific external storage by
+        // ScreenshotComparator. adb pull as the shell user can read this.
         project.exec {
-            commandLine(adb, "-s", serial, "pull", "/sdcard/Download/test_output", testDir.absolutePath)
+            commandLine(adb, "-s", serial, "pull",
+                "/sdcard/Android/data/chimin.remindme/files/test_output", testDir.absolutePath)
+            isIgnoreExitValue = true
         }
         // adb pull of a directory nests it under a `test_output` subfolder; move
         // the PNGs up so they live directly in the screenshots dir.
@@ -169,7 +198,7 @@ abstract class WidgetScreenshotTask : DefaultTask() {
             .filter { it.isFile && it.extension.equals("png", ignoreCase = true) }
             .count()
         if (pulled == 0) {
-            println("Warning: no PNG screenshots were pulled from /sdcard/Download/test_output.")
+            println("Warning: no PNG screenshots were pulled from external storage.")
         } else {
             println("Pulled $pulled screenshot(s) into ${testDir.absolutePath}.")
         }

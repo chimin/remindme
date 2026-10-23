@@ -101,6 +101,26 @@ flutter run -d <device> --dart-define-from-file=secrets/debug.json
 - Analyze code: `flutter analyze`
 - Run tests: `flutter test --dart-define=GOOGLE_WEB_CLIENT_ID=test123`
 
+## Widget Screenshots
+
+Run widget screenshot tests via Gradle. This task finds an emulator (or launches
+the default AVD `RemindMe_Test`), waits for it to boot, runs
+`screenshotTests` targeting only the emulator (avoiding
+`INSTALL_FAILED_USER_RESTRICTED`), captures two widget screenshots
+(empty state and populated fixture), and pulls them into `android/app/test/screenshots/`.
+
+```bash
+# Run to capture screenshots
+./gradlew screenshotTests
+
+# Options (pass to Gradle -P):
+-PskipBootWait=true          - skip boot-completed wait loop
+-Pavd="AVD-Name"           - specify AVD (default: RemindMe_Test)
+```
+
+Screenshots are written to app-specific external storage by the test,
+then pulled via `adb pull` into `android/app/test/screenshots/`.
+
 ## Notes
 - The app defaults to the task list named "Tasks" if present, otherwise creates it automatically
 - Google Sign-In uses the web client ID from `secrets/debug.json` via `--dart-define-from-file` (or falls back to `GOOGLE_WEB_CLIENT_ID` env var)

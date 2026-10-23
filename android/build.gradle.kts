@@ -24,16 +24,18 @@ tasks.register<Delete>("clean") {
 }
 
 /**
- * Run connectedAndroidTest on an emulator and pull widget screenshots.
+ * Run screenshot tests on an emulator and pull widget screenshots.
  *
  * Usage:
- *   ./gradlew pullWidgetScreenshots
- *   ./gradlew pullWidgetScreenshots -PupdateGoldens=true -PskipBootWait=true
+ *   ./gradlew screenshotTests
+ *   ./gradlew screenshotTests -PskipBootWait=true
  */
 tasks.register<WidgetScreenshotTask>("screenshotTests") {
     group = "verification"
-    description = "Ensure an emulator is booted, run :app:connectedAndroidTest on it, and pull widget screenshots."
-    updateGoldens = project.hasProperty("updateGoldens") && project.property("updateGoldens").toString().toBoolean()
+    description = "Ensure an emulator is booted, run widget screenshot tests on it, and pull screenshots."
     skipBootWait = project.hasProperty("skipBootWait") && project.property("skipBootWait").toString().toBoolean()
     avd = project.findProperty("avd")?.toString() ?: "RemindMe_Test"
+
+    dependsOn(":app:assembleDebug")
+    dependsOn(":app:assembleDebugAndroidTest")
 }
