@@ -1,7 +1,12 @@
 package chimin.remindme
 
+import android.appwidget.AppWidgetManager
+import android.content.Intent
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.ListView
 import android.widget.TextView
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Test
@@ -9,12 +14,6 @@ import org.junit.runner.RunWith
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.json.JSONArray
 
-/**
- * Captures two widget screenshot scenarios and pulls them into
- * android/app/test/screenshots via the screenshotTests Gradle task.
- *   - an empty task list (renders the empty-state view)
- *   - the populated task fixture used by the Flutter task_home_screen_test.dart
- */
 @RunWith(AndroidJUnit4::class)
 class TaskWidgetScreenshotTest {
 
@@ -26,11 +25,18 @@ class TaskWidgetScreenshotTest {
         return ScreenshotCapture.renderToBitmap(view)
     }
 
+    private fun inflateListItem(context: android.content.Context, type: String): View {
+        return when (type) {
+            "tasklist" -> LayoutInflater.from(context).inflate(R.layout.task_widget_title, null, false)
+            "header" -> LayoutInflater.from(context).inflate(R.layout.task_widget_group, null, false)
+            else -> LayoutInflater.from(context).inflate(R.layout.task_widget_item, null, false)
+        }
+    }
+
     @Test
     fun captureEmptyStateWidgetScreenshot() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val inflater = android.view.LayoutInflater.from(context)
-        val view = inflater.inflate(R.layout.task_widget, null, false)
+        val view = LayoutInflater.from(context).inflate(R.layout.task_widget, null, false)
         val bitmap = renderView(view, 400, 600)
         ScreenshotCapture.captureScreenshot("task_widget_empty_state.png", bitmap, context)
     }
@@ -38,10 +44,8 @@ class TaskWidgetScreenshotTest {
     @Test
     fun capturePopulatedWidgetScreenshot() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val inflater = android.view.LayoutInflater.from(context)
-        val view = inflater.inflate(R.layout.task_widget, null, false)
-        val container = view.findViewById<LinearLayout>(R.id.container)
-        val emptyView = view.findViewById<View>(R.id.empty_view)
+        val view = LayoutInflater.from(context).inflate(R.layout.task_widget, null, false)
+        val listView = view.findViewById<ListView>(R.id.task_list)
 
         val payload = JSONArray("""
             [
@@ -60,35 +64,54 @@ class TaskWidgetScreenshotTest {
             ]
         """.trimIndent())
 
-        for (i in 0 until payload.length()) {
-            val obj = payload.getJSONObject(i)
-            when (obj.getString("type")) {
-                "tasklist" -> {
-                    val item = inflater.inflate(R.layout.task_widget_title, null, false)
-                    item.findViewById<View>(R.id.task_list_title).let {
-                        (it as TextView).text = obj.getString("title")
+        val adapterData = mutableListOf<Map<String, Any>>()
+        val adapter = object : android.widget.BaseAdapter() {
+            override fun getCount(): Int = adapterData.size
+            private val data = adapterData
+            override fun getItem(position: Int): Any = data[position]
+            override fun getItemId(position: Int): Long = position.toLong()
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val item = data[position]
+                val type = item["type"] as String
+                val itemTitle = item["title"] as String
+                val category = item["category"] as String
+                val completed = item["completed"] as Boolean
+
+                val v = inflateListItem(context, type)
+                when (type) {
+                    "tasklist" -> {
+                        v.findViewById<TextView>(R.id.task_list_title).text = itemTitle
                     }
-                    container.addView(item)
-                }
-                "header" -> {
-                    val item = inflater.inflate(R.layout.task_widget_group, null, false)
-                    val title = item.findViewById<View>(R.id.group_title) as TextView
-                    title.text = obj.getString("title")
-                    if (obj.getString("category") == "overdue") {
-                        title.setTextColor(0xFFF44336.toInt())
+                    "header" -> {
+                        val title = v.findViewById<TextView>(R.id.group_title)
+                        title.text = itemTitle
+                        if (category == "overdue") {
+                            title.setTextColor(0xFFF44336.toInt())
+                        }
                     }
-                    container.addView(item)
+                    "task" -> {
+                        val title = v.findViewById<TextView>(R.id.title)
+                        val checkbox = v.findViewById<TextView>(R.id.checkbox)
+                        title.text = itemTitle
+                        checkbox.text = if (completed) "\u2714" else "\u25A1"
+                    }
                 }
-                "task" -> {
-                    val item = inflater.inflate(R.layout.task_widget_item, null, false)
-                    val title = item.findViewById<View>(R.id.title) as TextView
-                    val checkbox = item.findViewById<View>(R.id.checkbox) as TextView
-                    title.text = obj.getString("title")
-                    checkbox.text = if (obj.getBoolean("completed")) "\u2713" else "\u25CB"
-                    container.addView(item)
-                }
+                return v
             }
         }
+
+        for (i in 0 until payload.length()) {
+            val obj = payload.getJSONObject(i)
+            adapterData.add(mapOf(
+                "type" to obj.getString("type"),
+                "title" to obj.getString("title"),
+                "category" to obj.optString("category", ""),
+                "completed" to obj.optBoolean("completed", false),
+            ))
+        }
+        listView.adapter = adapter
+
+        val emptyView = view.findViewById<View>(R.id.empty_view)
         emptyView.visibility = View.GONE
 
         val bitmap = renderView(view, 400, 600)

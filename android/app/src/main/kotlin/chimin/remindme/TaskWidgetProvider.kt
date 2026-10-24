@@ -168,7 +168,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
         setTextViewText(R.id.title, item.title)
         setTextViewText(
           R.id.checkbox,
-          if (item.completed) "\u2713" else "\u25CB",
+          if (item.completed) "\u2714" else "\u25A1",
         )
         setInt(R.id.checkbox, "setTextColor", colorConfig.textColor)
         if (item.completed) {
@@ -211,6 +211,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
     }
     val items = if (prefs != null) loadItems(prefs) else emptyList()
     val colorConfig = loadColorConfig(prefs)
+    // Extract tasklist title from data
+    val taskListTitle = items.firstOrNull { it.type == "tasklist" }?.title ?: ""
     val hasTasks = items.any { it.type == "task" }
     val pending = try {
       openAppIntent(context)
@@ -222,18 +224,29 @@ class TaskWidgetProvider : AppWidgetProvider() {
     for (widgetId in appWidgetIds) {
       val views = RemoteViews(context.packageName, R.layout.task_widget)
       try {
-        views.removeAllViews(R.id.container)
-        for (item in items) {
-          try {
-            views.addView(R.id.container, buildItemViews(context, item, pending, colorConfig))
-          } catch (e: Exception) {
-            Log.e(TAG, "Failed to render item '${item.title}', skipping", e)
-          }
+        // Set task list title from data
+        views.setTextViewText(R.id.task_list_title, taskListTitle)
+        views.setInt(R.id.task_list_title, "setTextColor", colorConfig.textColor)
+        views.setInt(R.id.task_list_title, "setBackgroundColor", colorConfig.backgroundColor)
+        if (pending != null) {
+          views.setOnClickPendingIntent(R.id.task_list_title, pending)
         }
+
+        // Set up scrollable list adapter for task items (groups + tasks)
+        val listIntent = Intent(context, TaskWidgetService::class.java).apply {
+          putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+        }
+        views.setRemoteAdapter(R.id.task_list, listIntent)
+
+        // Set up empty view (shown when list is empty)
+        views.setEmptyView(R.id.task_list, R.id.empty_view)
+
+        // Show/hide empty view based on whether there are tasks
         views.setViewVisibility(
           R.id.empty_view,
           if (hasTasks) View.GONE else View.VISIBLE,
         )
+
         views.setInt(R.id.empty_view, "setTextColor", colorConfig.textColor)
         views.setInt(R.id.empty_view, "setBackgroundColor", colorConfig.backgroundColor)
         if (pending != null) {
