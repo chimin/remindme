@@ -3,11 +3,7 @@
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:paddingTop="12dp"
-    android:paddingBottom="12dp"
-    android:paddingStart="12dp"
-    android:paddingEnd="12dp">
+    android:orientation="vertical">
 
     <include
         android:id="@+id/task_list_title_container"
