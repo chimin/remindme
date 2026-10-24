@@ -145,17 +145,25 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
                 maxLines: 3,
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _dueDate == null ? 'No due date' : 'Due: ${_dueDate!.toIso8601String().split('T')[0]}',
+              InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Due date',
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _dueDate == null ? 'No due date' : _dueDate!.toIso8601String().split('T')[0],
+                      ),
                     ),
-                  ),
-                  TextButton(onPressed: _pickDueDate, child: const Text('Set date')),
-                  if (_dueDate != null)
-                    TextButton(onPressed: () => setState(() => _dueDate = null), child: const Text('Clear')),
-                ],
+                    IconButton(onPressed: _pickDueDate, icon: const Icon(Icons.calendar_today)),
+                    if (_dueDate != null)
+                      IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () => setState(() => _dueDate = null),
+                      ),
+                  ],
+                ),
               ),
               const Spacer(),
               ElevatedButton(
