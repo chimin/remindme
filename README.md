@@ -101,25 +101,31 @@ flutter run -d <device> --dart-define-from-file=secrets/build.json
 - Analyze code: `flutter analyze`
 - Run tests: `flutter test --dart-define=GOOGLE_WEB_CLIENT_ID=test123`
 
-## Widget Screenshots
+## Android screenshots
 
-Run widget screenshot tests via Gradle. This task finds an emulator (or launches
-the default AVD `RemindMe_Test`), waits for it to boot, runs
-`screenshotTests` targeting only the emulator (avoiding
-`INSTALL_FAILED_USER_RESTRICTED`), captures two widget screenshots
-(empty state and populated fixture), and pulls them into `android/app/test/screenshots/`.
+Run from PowerShell:
 
-```bash
-# Run to capture screenshots
-./gradlew screenshotTests
-
-# Options (pass to Gradle -P):
--PskipBootWait=true          - skip boot-completed wait loop
--Pavd="AVD-Name"           - specify AVD (default: RemindMe_Test)
+```powershell
+Set-Location android
+.\gradlew.bat screenshotTests
 ```
 
-Screenshots are written to app-specific external storage by the test,
-then pulled via `adb pull` into `android/app/test/screenshots/`.
+This builds a debug APK with the separate `lib/main_screenshot.dart` entry
+point and runs `MainActivityScreenshotTest` on an emulator only. No Google
+sign-in is needed and no account data is changed. Rebuild the normal app
+afterwards to restore the usual sign-in flow.
+
+The fixture has exactly four incomplete tasks: yesterday, today, two days
+ahead, and five days ahead, relative to the emulator's local date.
+
+The task captures the real task listing, add-task screen (keyboard hidden),
+and launcher with the real app widget. Files are pulled into
+`android/app/test/screenshots/`:
+`task_listing.png`, `add_task.png`, and `home_screen_widget.png`.
+
+Use an English, unlocked emulator with a launcher supporting widget pinning.
+Keep the widget on the current home page. The default AVD is `RemindMe_Test`;
+override with `-Pavd=YourAvd`. Use `-PskipBootWait=true` if already booted.
 
 ## Notes
 - The app defaults to the task list named "Tasks" if present, otherwise creates it automatically

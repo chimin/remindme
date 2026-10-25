@@ -1,3 +1,9 @@
+// The fixture entry point is compiled only for the screenshot workflow.
+if (gradle.startParameter.taskNames.any { it.substringAfterLast(':') == "screenshotTests" }) {
+    project(":app").extensions.extraProperties["target"] =
+        rootProject.file("../lib/main_screenshot.dart").absolutePath
+}
+
 allprojects {
     repositories {
         google()

@@ -21,21 +21,19 @@ Future<void> main() async {
   await repo.init();
   await syncService.init();
 
-  runApp(
-    ChangeNotifierProvider.value(
-      value: repo,
-      child: const MyApp(),
-    ),
-  );
+  runApp(ChangeNotifierProvider.value(value: repo, child: const MyApp()));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, this.showDebugBanner = true});
+
+  final bool showDebugBanner;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Remind Me',
+      debugShowCheckedModeBanner: showDebugBanner,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
@@ -52,9 +50,7 @@ class AuthRouter extends StatelessWidget {
   Widget build(BuildContext context) {
     final repo = context.watch<TasksRepository>();
     if (!repo.initialized) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (!repo.signedIn) {
       return const LoginScreen();

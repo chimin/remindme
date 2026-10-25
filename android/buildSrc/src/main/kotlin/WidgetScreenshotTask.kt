@@ -155,7 +155,6 @@ abstract class WidgetScreenshotTask : DefaultTask() {
     private fun runTests(serial: String, adb: String) {
         installApks(adb, serial)
         val testDir = File(project.projectDir, "app/test/screenshots")
-        if (testDir.exists()) testDir.deleteRecursively()
         testDir.mkdirs()
         // Clear stale screenshots from external storage before running.
         project.exec {
@@ -164,42 +163,28 @@ abstract class WidgetScreenshotTask : DefaultTask() {
         }
         // Run the test APK directly via am instrument so the app stays installed
         // (connectedAndroidTest uninstalls the app afterwards, which breaks pull).
+        val instrumentationOutput = ByteArrayOutputStream()
         val result = project.exec {
+            standardOutput = instrumentationOutput
             commandLine(adb, "-s", serial, "shell",
-                "am instrument -w chimin.remindme.test/androidx.test.runner.AndroidJUnitRunner")
+                "am instrument -w -e class chimin.remindme.MainActivityScreenshotTest chimin.remindme.test/androidx.test.runner.AndroidJUnitRunner")
             isIgnoreExitValue = true
         }
-        if (result.exitValue != 0) {
-            error("am instrument failed with exit code ${result.exitValue}.")
+        val report = instrumentationOutput.toString()
+        println(report)
+        if (result.exitValue != 0 || !report.contains("OK (3 tests)")) {
+            error("Screenshot instrumentation failed. See the test report above.")
         }
     }
 
     private fun pullScreenshots(adb: String, serial: String) {
         val testDir = File(project.projectDir, "app/test/screenshots")
-        if (testDir.exists()) testDir.deleteRecursively()
         testDir.mkdirs()
         // Screenshots are written to app-specific external storage by
-        // ScreenshotComparator. adb pull as the shell user can read this.
+        // MainActivityScreenshotTest. adb pull as the shell user can read this.
         project.exec {
             commandLine(adb, "-s", serial, "pull",
-                "/sdcard/Android/data/chimin.remindme/files/test_output", testDir.absolutePath)
-            isIgnoreExitValue = true
-        }
-        // adb pull of a directory nests it under a `test_output` subfolder; move
-        // the PNGs up so they live directly in the screenshots dir.
-        val nested = File(testDir, "test_output")
-        if (nested.exists()) {
-            nested.walkTopDown().maxDepth(1)
-                .filter { it.isFile && it.extension.equals("png", ignoreCase = true) }
-                .forEach { it.copyTo(File(testDir, it.name), overwrite = true); it.delete() }
-            nested.deleteRecursively()
-        }
-        // Also pull the home screen screenshot captured by HomeScreenWidgetTest
-        // which saves to public Pictures directory.
-        project.exec {
-            commandLine(adb, "-s", serial, "pull",
-                "/sdcard/Pictures/home_screen_widget.png",
-                File(testDir, "home_screen_widget.png").absolutePath)
+                "/sdcard/Android/data/chimin.remindme/files/test_output/golden/.", testDir.absolutePath)
             isIgnoreExitValue = true
         }
         val pulled = testDir.walkTopDown()

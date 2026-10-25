@@ -394,6 +394,7 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
                     ),
             ),
       floatingActionButton: FloatingActionButton(
+        tooltip: 'Add task',
         onPressed: selectedId == null
             ? null
             : () async {
