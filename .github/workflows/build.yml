@@ -1,0 +1,61 @@
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_version:
+        description: 'App version (e.g., 1.0.0+1 or just 1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.4'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Create secrets directory
+        run: mkdir -p secrets
+
+      - name: Create debug.json from secrets
+        run: |
+          echo "{\"GOOGLE_WEB_CLIENT_ID\":\"${GOOGLE_WEB_CLIENT_ID}\"}" > secrets/build.json
+
+      - name: Restore debug keystore from secrets
+        run: |
+          echo "${{ secrets.BUILD_KEYSTORE_BASE64 }}" | base64 -d > secrets/build.keystore
+
+      - name: Update pubspec version
+        run: |
+          # Update version in pubspec.yaml
+          sed -i "s/^version: .*/version: ${{ inputs.app_version }}/" pubspec.yaml
+
+      - name: Build APK
+        run: |
+          flutter build apk --release --dart-define-from-file=secrets/build.json
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remindme-apk-${{ inputs.app_version }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error

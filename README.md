@@ -34,9 +34,9 @@ A Flutter task management app that syncs with Google Tasks. Users sign in with t
 #### Android client
 - Application type: **Android**
 - Package name: `chimin.remindme`
-- SHA-1 certificate fingerprint:
+-   SHA-1 certificate fingerprint:
   ```bash
-  keytool -list -v -alias androiddebugkey -keystore ./secrets/debug.keystore -storepass android -keypass android
+  keytool -list -v -alias androiddebugkey -keystore ./secrets/build.keystore -storepass android -keypass android
   ```
 - Register debug and release SHA-1 if needed
 
@@ -79,7 +79,7 @@ flutter pub get
 ```
 
 ### Run on Android
-Create `secrets/debug.json` with your web client ID:
+Create `secrets/build.json` with your web client ID:
 ```json
 {
   "GOOGLE_WEB_CLIENT_ID": "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
@@ -87,13 +87,13 @@ Create `secrets/debug.json` with your web client ID:
 ```
 Then run:
 ```bash
-flutter run -d <device> --dart-define-from-file=secrets/debug.json
+flutter run -d <device> --dart-define-from-file=secrets/build.json
 ```
-Same for IntelliJ - add `--dart-define-from-file=secrets/debug.json` to your run configuration.
+Same for IntelliJ - add `--dart-define-from-file=secrets/build.json` to your run configuration.
 
 ### Run on iOS
 ```bash
-flutter run -d <device> --dart-define-from-file=secrets/debug.json
+flutter run -d <device> --dart-define-from-file=secrets/build.json
 ```
 
 ## Development
@@ -123,5 +123,24 @@ then pulled via `adb pull` into `android/app/test/screenshots/`.
 
 ## Notes
 - The app defaults to the task list named "Tasks" if present, otherwise creates it automatically
-- Google Sign-In uses the web client ID from `secrets/debug.json` via `--dart-define-from-file` (or falls back to `GOOGLE_WEB_CLIENT_ID` env var)
+- Google Sign-In uses the web client ID from `secrets/build.json` via `--dart-define-from-file` (or falls back to `GOOGLE_WEB_CLIENT_ID` env var)
 - For production distribution, you may need to complete Google OAuth app verification for the sensitive `auth/tasks` scope
+
+## GitHub Actions (CI/CD)
+
+The workflow `.github/workflows/build.yml` builds a release APK on manual trigger with an `app_version` input and uploads it as an artifact.
+
+### Required GitHub Secrets
+
+Add these secrets in your repo: **Settings → Secrets and variables → Actions**.
+
+| Secret | Description | How to generate |
+| --- | --- | --- |
+| `GOOGLE_WEB_CLIENT_ID` | Web OAuth client ID from Google Cloud Console (same as used in `secrets/build.json`) | From GCP: APIs & Services → Credentials → OAuth 2.0 Client IDs → Web application client |
+| `BUILD_KEYSTORE_BASE64` | Base64-encoded keystore file for signing | Encode your keystore: `base64 -w 0 secrets/build.keystore` (Linux/macOS) or `certutil -encode secrets/build.keystore build.keystore.b64` and strip headers (Windows). Copy the full base64 string as the secret. |
+
+### Usage
+
+1. Go to **Actions → Build → Run workflow**
+2. Enter `app_version` (e.g. `1.0.0+1`)
+3. Wait for the build to complete and download `remindme-apk-<version>` from the workflow artifacts

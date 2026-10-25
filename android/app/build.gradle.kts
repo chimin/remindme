@@ -32,12 +32,12 @@ android {
 }
 
     signingConfigs {
-        create("dev") {
-            val keystore = file("../../secrets/debug.keystore")
+        create("build") {
+            val keystore = file("../../secrets/build.keystore")
             if (!keystore.exists()) {
                 throw GradleException(
-                    "secrets/debug.keystore not found. Place the shared debug keystore there, or create one with: " +
-                    "keytool -genkey -v -keystore secrets/debug.keystore -alias androiddebugkey " +
+                    "secrets/build.keystore not found. Place the shared keystore there, or create one with: " +
+                    "keytool -genkey -v -keystore secrets/build.keystore -alias androiddebugkey " +
                     "-keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android " +
                     "(then register its SHA-1 in Google Cloud Console)"
                 )
@@ -51,12 +51,12 @@ android {
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("dev")
+            signingConfig = signingConfigs.getByName("build")
         }
         release {
             // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Signing with the build keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("build")
         }
     }
 }
