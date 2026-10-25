@@ -13,23 +13,35 @@ class LoginScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Sign in')),
       body: Center(
-        child: ElevatedButton.icon(
-          icon: const Icon(Icons.login),
-          label: const Text('Continue with Google'),
-          onPressed: repo.signedIn
-              ? null
-              : () async {
-                  try {
-                    await context.read<TasksRepository>().signIn();
-                  } catch (e, st) {
-                    logError('Sign in failed', e, st);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Sign in failed: $e')),
-                      );
-                    }
-                  }
-                },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (repo.authError != null)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(repo.authError!),
+              ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.login),
+              label: Text(
+                repo.signingIn ? 'Signing in...' : 'Continue with Google',
+              ),
+              onPressed: repo.signedIn || repo.signingIn
+                  ? null
+                  : () async {
+                      try {
+                        await context.read<TasksRepository>().signIn();
+                      } catch (e, st) {
+                        logError('Sign in failed', e, st);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Sign in failed: $e')),
+                          );
+                        }
+                      }
+                    },
+            ),
+          ],
         ),
       ),
     );

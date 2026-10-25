@@ -59,8 +59,6 @@ void main() {
           ),
         ),
       );
-      tester.view.devicePixelRatio = 2.0;
-      tester.view.physicalSize = const Size(720, 1280);
       await tester.pumpAndSettle();
 
       expect(find.text('New Task'), findsOneWidget);

@@ -57,8 +57,6 @@ void main() {
         ),
       ),
     );
-    tester.view.devicePixelRatio = 2.0;
-    tester.view.physicalSize = const Size(720, 1280);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
@@ -141,8 +139,6 @@ void main() {
           ),
         ),
       );
-      tester.view.devicePixelRatio = 2.0;
-      tester.view.physicalSize = const Size(720, 1280);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
@@ -212,8 +208,6 @@ void main() {
           ),
         ),
       );
-      tester.view.devicePixelRatio = 2.0;
-      tester.view.physicalSize = const Size(720, 1280);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();

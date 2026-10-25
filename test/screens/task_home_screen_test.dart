@@ -114,8 +114,6 @@ void main() {
           ),
         ),
       );
-      tester.view.devicePixelRatio = 2.0;
-      tester.view.physicalSize = const Size(720, 1280);
       await mock.init();
       mock.signInMock(tasklistId: 'list-1');
       await tester.pumpAndSettle();
@@ -210,8 +208,6 @@ void main() {
           ),
         ),
       );
-      tester.view.devicePixelRatio = 2.0;
-      tester.view.physicalSize = const Size(720, 1280);
       await mock.init();
       mock.signInMock(tasklistId: 'list-1');
       await tester.pumpAndSettle();
@@ -274,8 +270,6 @@ void main() {
           ),
         ),
       );
-      tester.view.devicePixelRatio = 2.0;
-      tester.view.physicalSize = const Size(720, 1280);
       await mock.init();
       mock.signInMock(tasklistId: 'list-1');
       await tester.pumpAndSettle();
@@ -355,8 +349,6 @@ void main() {
           ),
         ),
       );
-      tester.view.devicePixelRatio = 2.0;
-      tester.view.physicalSize = const Size(720, 1280);
       await mock.init();
       mock.signInMock(tasklistId: 'list-1');
       await tester.pumpAndSettle();
@@ -430,8 +422,6 @@ void main() {
           ),
         ),
       );
-      tester.view.devicePixelRatio = 2.0;
-      tester.view.physicalSize = const Size(720, 1280);
       await mock.init();
       mock.signInMock(tasklistId: 'list-1');
       await tester.pumpAndSettle();
@@ -487,8 +477,6 @@ void main() {
           ),
         ),
       );
-      tester.view.devicePixelRatio = 2.0;
-      tester.view.physicalSize = const Size(720, 1280);
       await mock.init();
       mock.signInMock(tasklistId: 'list-1');
       await tester.pumpAndSettle();
@@ -533,8 +521,6 @@ void main() {
           ),
         ),
       );
-      tester.view.devicePixelRatio = 2.0;
-      tester.view.physicalSize = const Size(720, 1280);
       await mock.init();
       mock.signInMock(tasklistId: 'list-1');
       await tester.pumpAndSettle();
@@ -602,8 +588,6 @@ void main() {
           ),
         ),
       );
-      tester.view.devicePixelRatio = 2.0;
-      tester.view.physicalSize = const Size(720, 1280);
       await mock.init();
       mock.signInMock(tasklistId: 'list-1');
       await tester.pumpAndSettle();

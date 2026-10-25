@@ -224,77 +224,147 @@ class TasksRepository extends ChangeNotifier {
 
   TasksRepository();
 
+  bool signingIn = false;
+  String? authError;
+  bool _googleInitialized = false;
+  bool _disposed = false;
+  int _authGeneration = 0;
+
+  void _publishAuth() {
+    if (!_disposed) notifyListeners();
+  }
+
+  void _clearAuthentication() {
+    _authGeneration++;
+    _currentUser = null;
+    _authorization = null;
+    _tasksApi = null;
+    signingIn = false;
+  }
+
+  void _authenticationFailed(Object error, StackTrace stack) {
+    logError('Sign in failed', error, stack);
+    _clearAuthentication();
+    authError =
+        error is GoogleSignInException &&
+            error.code == GoogleSignInExceptionCode.canceled
+        ? null
+        : 'Unable to sign in. Please try again.';
+    _publishAuth();
+  }
+
+  Future<void> _initializeGoogle() async {
+    if (_googleInitialized) return;
+    await _signIn.initialize(
+      serverClientId: getGoogleWebClientId().isNotEmpty
+          ? getGoogleWebClientId()
+          : null,
+    );
+    _googleInitialized = true;
+    _sub = _signIn.authenticationEvents.listen(
+      (event) {
+        if (event is GoogleSignInAuthenticationEventSignOut) {
+          _clearAuthentication();
+          _publishAuth();
+        } else if (event is GoogleSignInAuthenticationEventSignIn &&
+            !signingIn) {
+          unawaited(_acceptEvent(event.user));
+        }
+      },
+      onError: (Object error, StackTrace stack) {
+        _authenticationFailed(error, stack);
+      },
+    );
+  }
+
+  Future<void> _acceptEvent(GoogleSignInAccount user) async {
+    signingIn = true;
+    final generation = ++_authGeneration;
+    try {
+      await _completeSignIn(user, generation);
+    } catch (error, stack) {
+      if (generation == _authGeneration) _authenticationFailed(error, stack);
+    } finally {
+      if (generation == _authGeneration) {
+        signingIn = false;
+        _publishAuth();
+      }
+    }
+  }
+
   Future<void> init() async {
     await Hive.initFlutter();
     _cacheBox = await Hive.openBox(_kCacheBox);
 
-    await _signIn.initialize(
-        serverClientId: getGoogleWebClientId().isNotEmpty ? getGoogleWebClientId() : null);
-
-    // Attempt silent sign-in with cached credentials before marking initialized,
-    // so AuthRouter goes straight to the home screen when already signed in
-    // instead of flashing the login screen.
-    final account = await _signIn.attemptLightweightAuthentication();
-    if (account != null) {
-      _currentUser = account;
-      await _checkAuthorization();
-      if (_tasksApi != null) {
-        await onSignedIn?.call();
-      }
-    }
-
-    initialized = true;
-    _sub = _signIn.authenticationEvents.listen((e) async {
-      switch (e) {
-        case GoogleSignInAuthenticationEventSignIn():
-          _currentUser = e.user;
-          await _checkAuthorization();
-          if (_tasksApi != null) {
-            await onSignedIn?.call();
-          }
-          break;
-        case GoogleSignInAuthenticationEventSignOut():
-          _currentUser = null;
-          _authorization = null;
-          _tasksApi = null;
-          break;
-      }
-      notifyListeners();
-    });
     await _loadSelectedTasklist();
     await _loadShowCompleted();
+    signingIn = true;
+    final generation = ++_authGeneration;
+    try {
+      await _initializeGoogle();
+      final account = await _signIn.attemptLightweightAuthentication();
+      if (account != null) await _completeSignIn(account, generation);
+    } catch (error, stack) {
+      _authenticationFailed(error, stack);
+    } finally {
+      signingIn = false;
+      initialized = true;
+      _publishAuth();
+    }
   }
 
-  Future<void> signIn() => _signIn.authenticate();
+  Future<void> signIn() async {
+    if (signingIn) return;
+    signingIn = true;
+    authError = null;
+    final generation = ++_authGeneration;
+    _publishAuth();
+    try {
+      await _initializeGoogle();
+      final user = await _signIn.authenticate();
+      await _completeSignIn(user, generation);
+    } catch (error, stack) {
+      if (generation == _authGeneration) _authenticationFailed(error, stack);
+    } finally {
+      if (generation == _authGeneration) {
+        signingIn = false;
+        _publishAuth();
+      }
+    }
+  }
 
   Future<void> signOut() async {
-    await _signIn.disconnect();
-    await WidgetService.clearWidget();
+    _clearAuthentication();
+    authError = null;
+    _publishAuth();
+    try {
+      await _signIn.disconnect();
+    } finally {
+      await WidgetService.clearWidget();
+    }
   }
 
-  Future<void> _checkAuthorization() async {
-    final authz = await _currentUser?.authorizationClient
-        .authorizationForScopes(googleTasksScopes);
-    _authorization = authz;
-    if (authz != null) {
-      _tasksApi = _buildClient(authz);
-    } else {
-      // Fallback: request authorization if not already granted
-      await requestAuthorization();
-      return;
+  Future<void> _completeSignIn(GoogleSignInAccount user, int generation) async {
+    final client = user.authorizationClient;
+    final authorization =
+        await client.authorizationForScopes(googleTasksScopes) ??
+        await client.authorizeScopes(googleTasksScopes);
+    if (_disposed || generation != _authGeneration) return;
+    _currentUser = user;
+    _authorization = authorization;
+    _tasksApi = _buildClient(authorization);
+    authError = null;
+    _publishAuth();
+    try {
+      await onSignedIn?.call();
+    } catch (error, stack) {
+      logError('Initial task sync failed', error, stack);
     }
-    notifyListeners();
   }
 
   Future<void> requestAuthorization() async {
-    final client = _currentUser?.authorizationClient;
-    if (client == null) return;
-    final authz = await client.authorizeScopes(googleTasksScopes);
-    _authorization = authz;
-    if (_authorization != null) {
-      _tasksApi = _buildClient(_authorization!);
-    }
-    notifyListeners();
+    final user = _currentUser;
+    if (user != null) await _acceptEvent(user);
   }
 
   TasksApi _buildClient(GoogleSignInClientAuthorization authz) {
@@ -361,9 +431,9 @@ class TasksRepository extends ChangeNotifier {
       return await fn();
     } on DetailedApiRequestError catch (e) {
       if (e.status == 401) {
-        await signOut();
-        await signIn();
-        return await fn();
+        _clearAuthentication();
+        authError = 'Your session expired. Please sign in again.';
+        _publishAuth();
       }
       rethrow;
     }
@@ -684,6 +754,8 @@ class TasksRepository extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _authGeneration++;
     _sub?.cancel();
     super.dispose();
   }
