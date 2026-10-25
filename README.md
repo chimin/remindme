@@ -137,7 +137,10 @@ Add these secrets in your repo: **Settings → Secrets and variables → Actions
 | Secret | Description | How to generate |
 | --- | --- | --- |
 | `GOOGLE_WEB_CLIENT_ID` | Web OAuth client ID from Google Cloud Console (same as used in `secrets/build.json`) | From GCP: APIs & Services → Credentials → OAuth 2.0 Client IDs → Web application client |
-| `BUILD_KEYSTORE_BASE64` | Base64-encoded keystore file for signing | Encode your keystore: `base64 -w 0 secrets/build.keystore` (Linux/macOS) or `certutil -encode secrets/build.keystore build.keystore.b64` and strip headers (Windows). Copy the full base64 string as the secret. |
+| `BUILD_KEYSTORE_BASE64` | Base64-encoded keystore file for signing (must be a release keystore for Play Store) | `base64 -w 0 release.keystore` |
+| `KEYSTORE_PASSWORD` | Keystore password | From your release keystore |
+| `KEY_ALIAS` | Key alias | From your release keystore |
+| `KEY_PASSWORD` | Key password | From your release keystore |
 
 ### Usage
 
