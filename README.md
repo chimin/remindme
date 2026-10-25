@@ -134,7 +134,7 @@ override with `-Pavd=YourAvd`. Use `-PskipBootWait=true` if already booted.
 
 ## GitHub Actions (CI/CD)
 
-The workflow `.github/workflows/build.yml` builds a release APK on manual trigger with an `app_version` input and uploads it as an artifact.
+The workflow `.github/workflows/build.yml` supports manual APK/AAB builds and automatically builds a signed AAB and publishes it to the Google Play internal testing track when a tag matching `vMAJOR.MINOR.PATCH` is pushed (for example, `v1.2.3`). Manual builds only upload workflow artifacts.
 
 ### Required GitHub Secrets
 
@@ -147,6 +147,7 @@ Add these secrets in your repo: **Settings → Secrets and variables → Actions
 | `KEYSTORE_PASSWORD` | Keystore password | From your release keystore |
 | `KEY_ALIAS` | Key alias | From your release keystore |
 | `KEY_PASSWORD` | Key password | From your release keystore |
+| `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | Raw service account JSON key used for tag releases | Enable the Google Play Android Developer API in its Cloud project, create a service account key, and grant the account access to `chimin.remindme` with permission to release to testing tracks in Play Console |
 
 ### Usage
 
@@ -154,3 +155,18 @@ Add these secrets in your repo: **Settings → Secrets and variables → Actions
 2. Enter `app_version` (e.g. `1.0.0+1`)
 3. Choose whether to build APK (default true) and/or AAB (default false)
 4. Wait for the build to complete and download artifacts (`remindme-apk-<version>` or `remindme-aab-<version>`) from the workflow artifacts
+
+### Publish a tag release
+
+Complete the Play Console app setup and upload the first release manually before using the API. The signing keystore must match the upload key registered for the app. See the [upload action prerequisites](https://github.com/r0adkll/upload-google-play#readme).
+
+Push a version tag to build and submit an internal testing release automatically:
+
+```powershell
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+The tag sets Android `versionName` to `1.2.3` and `versionCode` to `1002003`, using `major * 1000000 + minor * 1000 + patch`. Minor and patch must each be at most 999, and the resulting code must be between 1 and 2100000000. Use increasing versions whose codes exceed all previous uploads to Play, including manual uploads. Prerelease suffixes and leading zeroes are rejected. The repository's `pubspec.yaml` is updated only in the runner checkout.
+
+The AAB is also retained as a workflow artifact. Google Play review and account publishing settings determine when the submitted release becomes available to users. Manual workflow runs never publish to Play.

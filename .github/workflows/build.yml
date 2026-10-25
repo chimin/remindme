@@ -1,6 +1,9 @@
 name: Build
 
 on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
   workflow_dispatch:
     inputs:
       app_version:
@@ -18,6 +21,13 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,6 +40,39 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Resolve app version
+        id: version
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TAG_NAME: ${{ github.ref_name }}
+          APP_VERSION: ${{ inputs.app_version }}
+        run: |
+          if ($env:EVENT_NAME -eq 'push') {
+            # GitHub tag filters are globs; enforce the exact format here.
+            if ($env:TAG_NAME -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+              throw "Release tags must have the format v1.2.3."
+            }
+            $versionName = $env:TAG_NAME.Substring(1)
+            $parts = $versionName.Split('.')
+            $major = [long]$parts[0]
+            $minor = [long]$parts[1]
+            $patch = [long]$parts[2]
+            $versionCode = $major * 1000000 + $minor * 1000 + $patch
+            if ($minor -gt 999 -or $patch -gt 999 -or $versionCode -lt 1 -or $versionCode -gt 2100000000) {
+              throw "Tag version must produce a Play version code from 1 to 2100000000; minor and patch must be at most 999."
+            }
+            $appVersion = "${versionName}+${versionCode}"
+          } else {
+            $appVersion = $env:APP_VERSION
+            if ($appVersion -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\+[1-9][0-9]*)?$') {
+              throw "App version must have the format 1.2.3 or 1.2.3+4."
+            }
+          }
+          "app_version=$appVersion" >> $env:GITHUB_OUTPUT
+          $pubspec = Get-Content pubspec.yaml -Raw
+          Set-Content pubspec.yaml ($pubspec -replace '(?m)^version: .*$', "version: $appVersion") -NoNewline
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -46,44 +89,61 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Create secrets directory
-        run: mkdir -p secrets
-
-      - name: Create debug.json from secrets
+      - name: Restore build configuration and signing key
+        shell: pwsh
+        env:
+          BUILD_KEYSTORE_BASE64: ${{ secrets.BUILD_KEYSTORE_BASE64 }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
-          echo "{\"GOOGLE_WEB_CLIENT_ID\":\"${GOOGLE_WEB_CLIENT_ID}\"}" > secrets/build.json
-
-      - name: Restore debug keystore from secrets
-        run: |
-          echo "${{ secrets.BUILD_KEYSTORE_BASE64 }}" | base64 -d > secrets/build.keystore
-
-      - name: Update pubspec version
-        run: |
-          # Update version in pubspec.yaml
-          sed -i "s/^version: .*/version: ${{ inputs.app_version }}/" pubspec.yaml
+          foreach ($name in @('GOOGLE_WEB_CLIENT_ID', 'BUILD_KEYSTORE_BASE64', 'KEYSTORE_PASSWORD', 'KEY_ALIAS', 'KEY_PASSWORD')) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Required secret $name is missing."
+            }
+          }
+          if ('${{ github.event_name }}' -eq 'push' -and [string]::IsNullOrWhiteSpace($env:GOOGLE_PLAY_SERVICE_ACCOUNT_JSON)) {
+            throw "Required secret GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is missing."
+          }
+          New-Item -ItemType Directory -Force secrets | Out-Null
+          @{ GOOGLE_WEB_CLIENT_ID = $env:GOOGLE_WEB_CLIENT_ID } | ConvertTo-Json | Set-Content secrets/build.json
+          [IO.File]::WriteAllBytes('secrets/build.keystore', [Convert]::FromBase64String($env:BUILD_KEYSTORE_BASE64))
 
       - name: Build APK
-        if: ${{ inputs.build_apk }}
-        run: |
-          flutter build apk --release --dart-define-from-file=secrets/build.json
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_apk }}
+        run: flutter build apk --release --dart-define-from-file=secrets/build.json
 
       - name: Upload APK artifact
-        if: ${{ inputs.build_apk }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_apk }}
         uses: actions/upload-artifact@v4
         with:
-          name: remindme-apk-${{ inputs.app_version }}
+          name: remindme-apk-${{ steps.version.outputs.app_version }}
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
       - name: Build AAB
-        if: ${{ inputs.build_aab }}
-        run: |
-          flutter build appbundle --release --dart-define-from-file=secrets/build.json
+        if: ${{ github.event_name == 'push' || inputs.build_aab }}
+        run: flutter build appbundle --release --dart-define-from-file=secrets/build.json
 
       - name: Upload AAB artifact
-        if: ${{ inputs.build_aab }}
+        if: ${{ github.event_name == 'push' || inputs.build_aab }}
         uses: actions/upload-artifact@v4
         with:
-          name: remindme-aab-${{ inputs.app_version }}
+          name: remindme-aab-${{ steps.version.outputs.app_version }}
           path: build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
+
+      - name: Publish to Google Play
+        if: ${{ github.event_name == 'push' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: chimin.remindme
+          releaseFiles: build/app/outputs/bundle/release/app-release.aab
+          releaseName: ${{ github.ref_name }}
+          track: internal
+          status: completed
+
+      - name: Clean up signing files
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          Remove-Item -LiteralPath secrets/build.keystore, secrets/build.json -Force -ErrorAction SilentlyContinue
