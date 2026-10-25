@@ -7,6 +7,16 @@ on:
         description: 'App version (e.g., 1.0.0+1 or just 1.0.0)'
         required: true
         type: string
+      build_apk:
+        description: 'Build APK'
+        required: false
+        type: boolean
+        default: true
+      build_aab:
+        description: 'Build AAB bundle'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -50,12 +60,27 @@ jobs:
           sed -i "s/^version: .*/version: ${{ inputs.app_version }}/" pubspec.yaml
 
       - name: Build APK
+        if: ${{ inputs.build_apk }}
         run: |
           flutter build apk --release --dart-define-from-file=secrets/build.json
 
       - name: Upload APK artifact
+        if: ${{ inputs.build_apk }}
         uses: actions/upload-artifact@v4
         with:
           name: remindme-apk-${{ inputs.app_version }}
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Build AAB
+        if: ${{ inputs.build_aab }}
+        run: |
+          flutter build appbundle --release --dart-define-from-file=secrets/build.json
+
+      - name: Upload AAB artifact
+        if: ${{ inputs.build_aab }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: remindme-aab-${{ inputs.app_version }}
+          path: build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error

@@ -143,4 +143,5 @@ Add these secrets in your repo: **Settings → Secrets and variables → Actions
 
 1. Go to **Actions → Build → Run workflow**
 2. Enter `app_version` (e.g. `1.0.0+1`)
-3. Wait for the build to complete and download `remindme-apk-<version>` from the workflow artifacts
+3. Choose whether to build APK (default true) and/or AAB (default false)
+4. Wait for the build to complete and download artifacts (`remindme-apk-<version>` or `remindme-aab-<version>`) from the workflow artifacts
