@@ -40,39 +40,45 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Resolve app version
         id: version
-        shell: pwsh
+        shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           TAG_NAME: ${{ github.ref_name }}
           APP_VERSION: ${{ inputs.app_version }}
         run: |
-          if ($env:EVENT_NAME -eq 'push') {
+          if [[ "$EVENT_NAME" == push ]]; then
             # GitHub tag filters are globs; enforce the exact format here.
-            if ($env:TAG_NAME -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
-              throw "Release tags must have the format v1.2.3."
-            }
-            $versionName = $env:TAG_NAME.Substring(1)
-            $parts = $versionName.Split('.')
-            $major = [long]$parts[0]
-            $minor = [long]$parts[1]
-            $patch = [long]$parts[2]
-            $versionCode = $major * 1000000 + $minor * 1000 + $patch
-            if ($minor -gt 999 -or $patch -gt 999 -or $versionCode -lt 1 -or $versionCode -gt 2100000000) {
-              throw "Tag version must produce a Play version code from 1 to 2100000000; minor and patch must be at most 999."
-            }
-            $appVersion = "${versionName}+${versionCode}"
-          } else {
-            $appVersion = $env:APP_VERSION
-            if ($appVersion -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\+[1-9][0-9]*)?$') {
-              throw "App version must have the format 1.2.3 or 1.2.3+4."
-            }
-          }
-          "app_version=$appVersion" >> $env:GITHUB_OUTPUT
-          $pubspec = Get-Content pubspec.yaml -Raw
-          Set-Content pubspec.yaml ($pubspec -replace '(?m)^version: .*$', "version: $appVersion") -NoNewline
+            if [[ ! "$TAG_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              echo 'Release tags must have the format v1.2.3.' >&2
+              exit 1
+            fi
+            version_name="${TAG_NAME#v}"
+            IFS=. read -r major minor patch <<< "$version_name"
+            # Bound components before arithmetic to avoid integer overflow.
+            if (( ${#major} > 4 || ${#minor} > 3 || ${#patch} > 3 )); then
+              echo 'Tag version components exceed the supported range.' >&2
+              exit 1
+            fi
+            version_code=$((major * 1000000 + minor * 1000 + patch))
+            if (( version_code < 1 || version_code > 2100000000 )); then
+              echo 'Tag version must produce a Play version code from 1 to 2100000000.' >&2
+              exit 1
+            fi
+            app_version="${version_name}+${version_code}"
+          else
+            app_version="$APP_VERSION"
+            if [[ ! "$app_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\+[1-9][0-9]*)?$ ]]; then
+              echo 'App version must have the format 1.2.3 or 1.2.3+4.' >&2
+              exit 1
+            fi
+          fi
+          printf 'app_version=%s\n' "$app_version" >> "$GITHUB_OUTPUT"
+          sed -i "s/^version: .*/version: $app_version/" pubspec.yaml
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -90,22 +96,24 @@ jobs:
         run: flutter pub get
 
       - name: Restore build configuration and signing key
-        shell: pwsh
+        shell: bash
         env:
           BUILD_KEYSTORE_BASE64: ${{ secrets.BUILD_KEYSTORE_BASE64 }}
           GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
-          foreach ($name in @('GOOGLE_WEB_CLIENT_ID', 'BUILD_KEYSTORE_BASE64', 'KEYSTORE_PASSWORD', 'KEY_ALIAS', 'KEY_PASSWORD')) {
-            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
-              throw "Required secret $name is missing."
-            }
-          }
-          if ('${{ github.event_name }}' -eq 'push' -and [string]::IsNullOrWhiteSpace($env:GOOGLE_PLAY_SERVICE_ACCOUNT_JSON)) {
-            throw "Required secret GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is missing."
-          }
-          New-Item -ItemType Directory -Force secrets | Out-Null
-          @{ GOOGLE_WEB_CLIENT_ID = $env:GOOGLE_WEB_CLIENT_ID } | ConvertTo-Json | Set-Content secrets/build.json
-          [IO.File]::WriteAllBytes('secrets/build.keystore', [Convert]::FromBase64String($env:BUILD_KEYSTORE_BASE64))
+          for name in GOOGLE_WEB_CLIENT_ID BUILD_KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!name//[[:space:]]/}" ]]; then
+              echo "Required secret $name is missing." >&2
+              exit 1
+            fi
+          done
+          if [[ "$GITHUB_EVENT_NAME" == push && -z "${GOOGLE_PLAY_SERVICE_ACCOUNT_JSON//[[:space:]]/}" ]]; then
+            echo 'Required secret GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is missing.' >&2
+            exit 1
+          fi
+          mkdir -p secrets
+          jq -n --arg client_id "$GOOGLE_WEB_CLIENT_ID" '{GOOGLE_WEB_CLIENT_ID: $client_id}' > secrets/build.json
+          printf '%s' "$BUILD_KEYSTORE_BASE64" | base64 --decode > secrets/build.keystore
 
       - name: Build APK
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_apk }}
@@ -131,6 +139,39 @@ jobs:
           path: build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
 
+      - name: Generate Google Play release notes
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          tags=$(git tag --merged HEAD)
+          version_tags=$(printf '%s\n' "$tags" | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | sort -V)
+          previous_tag=''
+          while IFS= read -r tag; do
+            if [[ "$tag" == "$TAG_NAME" ]]; then
+              break
+            fi
+            previous_tag="$tag"
+          done <<< "$version_tags"
+          # The first version includes all history; later versions exclude the previous tag.
+          range=HEAD
+          if [[ -n "$previous_tag" ]]; then
+            range="${previous_tag}..HEAD"
+          fi
+          notes=$(git log --reverse --format='- %s' "$range" --)
+          if [[ -z "$notes" ]]; then
+            notes='No new commits since the previous version.'
+          fi
+          # Google Play limits release notes to 500 characters per language.
+          if (( ${#notes} > 500 )); then
+            notes="${notes:0:497}..."
+          fi
+          directory="$RUNNER_TEMP/play-release-notes"
+          mkdir -p "$directory"
+          printf '%s' "$notes" > "$directory/whatsnew-en-US"
+          printf 'Release notes from %s:\n%s\n' "$range" "$notes"
+
       - name: Publish to Google Play
         if: ${{ github.event_name == 'push' }}
         uses: r0adkll/upload-google-play@v1
@@ -140,10 +181,11 @@ jobs:
           releaseFiles: build/app/outputs/bundle/release/app-release.aab
           releaseName: ${{ github.ref_name }}
           track: internal
+          whatsNewDirectory: ${{ runner.temp }}/play-release-notes
           status: completed
 
       - name: Clean up signing files
         if: ${{ always() }}
-        shell: pwsh
+        shell: bash
         run: |
-          Remove-Item -LiteralPath secrets/build.keystore, secrets/build.json -Force -ErrorAction SilentlyContinue
+          rm -f -- secrets/build.keystore secrets/build.json

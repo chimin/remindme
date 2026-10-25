@@ -170,3 +170,5 @@ git push origin v1.2.3
 The tag sets Android `versionName` to `1.2.3` and `versionCode` to `1002003`, using `major * 1000000 + minor * 1000 + patch`. Minor and patch must each be at most 999, and the resulting code must be between 1 and 2100000000. Use increasing versions whose codes exceed all previous uploads to Play, including manual uploads. Prerelease suffixes and leading zeroes are rejected. The repository's `pubspec.yaml` is updated only in the runner checkout.
 
 The AAB is also retained as a workflow artifact. Google Play review and account publishing settings determine when the submitted release becomes available to users. Manual workflow runs never publish to Play.
+
+Release notes are generated automatically from commit subjects between the highest earlier version tag reachable from the current commit and the current tag. The first version includes all commit history. Notes are uploaded in English (en-US), oldest commit first, and truncated to Google Play's 500-character limit. If there are no new commits, the notes say so.
