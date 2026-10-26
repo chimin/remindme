@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -14,7 +15,72 @@ import 'package:remindme/widgets/trailing_checked_menu_item.dart';
 
 import 'golden_test_helper.dart';
 
+class _DeletionRepository extends MockTasksRepository {
+  final deletions = [Completer<void>(), Completer<void>()];
+  int _nextDeletion = 0;
+
+  @override
+  Future<void> deleteTask(String tasklistId, String taskId) async {
+    await deletions[_nextDeletion++].future;
+    mockTasks.removeWhere((task) => task.id == taskId);
+  }
+}
+
 void main() {
+  testWidgets(
+    'delete completed tasks should show progress popup over listing when deletion is in progress',
+    (tester) async {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('home_widget'),
+        (_) async => null,
+      );
+      final repo = _DeletionRepository()
+        ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
+        ..mockTasks.addAll([
+          Task(id: 'one', title: 'First', status: 'completed'),
+          Task(id: 'two', title: 'Second', status: 'completed'),
+          Task(id: 'three', title: 'Active', status: 'needsAction'),
+        ])
+        ..signInMock(tasklistId: 'list-1');
+      await tester.pumpWidget(
+        ChangeNotifierProvider<TasksRepository>.value(
+          value: repo,
+          child: const MaterialApp(home: TaskHomeScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete completed tasks'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('0/2'), findsOneWidget);
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.text('First'), findsOneWidget);
+      expect(find.text('Second'), findsOneWidget);
+      expect(find.text('Active'), findsOneWidget);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pump();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      repo.deletions[0].complete();
+      await tester.pump();
+      expect(find.text('1/2'), findsOneWidget);
+      final screenshot = await captureAndCompare(
+        tester,
+        find.byType(MaterialApp),
+        'test/screens/golden/task_home_screen_delete_progress_popup.png',
+        'Delete completed tasks progress',
+      );
+      expect(screenshot['pass'], isTrue);
+      repo.deletions[1].complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('Active'), findsOneWidget);
+      expect(repo.mockTasks.map((task) => task.id), ['three']);
+    },
+  );
   setUpAll(() async {
     final robotoBytes = await File(
       'test/fonts/roboto-regular.ttf',

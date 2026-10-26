@@ -1000,13 +1000,19 @@ class TasksRepository extends ChangeNotifier {
     }
   }
 
-  Future<void> deleteCompletedTasks(String tasklistId) async {
+  Future<void> deleteCompletedTasks(
+    String tasklistId, {
+    void Function(int deleted, int total)? onProgress,
+  }) async {
     final tasks = await getTasks(tasklistId);
-    final completed = tasks.where(
-      (t) => t.status == 'completed' && t.id != null,
-    );
+    final completed = tasks
+        .where((t) => t.status == 'completed' && t.id != null)
+        .toList();
+    var deleted = 0;
+    onProgress?.call(deleted, completed.length);
     for (final task in completed) {
       await deleteTask(tasklistId, task.id!);
+      onProgress?.call(++deleted, completed.length);
     }
     notifyListeners();
   }

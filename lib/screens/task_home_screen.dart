@@ -137,7 +137,7 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text(
-                                  'Could not sync with Google Tasks. Please try again.',
+                                'Could not sync with Google Tasks. Please try again.',
                               ),
                             ),
                           );
@@ -299,11 +299,40 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
         ) ??
         false;
 
-    if (!confirmed) return;
+    if (!confirmed || !mounted) return;
 
-    setState(() => _loading = true);
+    final progress = ValueNotifier<String>('Preparing deletion…');
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final dialog = DialogRoute<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Text('Deleting completed tasks'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              ValueListenableBuilder<String>(
+                valueListenable: progress,
+                builder: (_, value, _) => Text(value),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    navigator.push(dialog);
     try {
-      await repo.deleteCompletedTasks(id);
+      await repo.deleteCompletedTasks(
+        id,
+        onProgress: (deleted, total) {
+          if (!mounted) return;
+          progress.value = '$deleted/$total';
+        },
+      );
       await _refreshTasks();
     } catch (e, st) {
       logError('Failed to delete completed tasks', e, st);
@@ -313,7 +342,8 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (dialog.isActive) navigator.removeRoute(dialog);
+      progress.dispose();
     }
   }
 
