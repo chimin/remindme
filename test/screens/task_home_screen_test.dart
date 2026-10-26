@@ -7,6 +7,8 @@ import 'package:googleapis/tasks/v1.dart';
 import 'package:provider/provider.dart';
 
 import 'package:remindme/main.dart';
+import 'package:remindme/models/task_metadata.dart';
+import 'package:remindme/screens/task_home_screen.dart';
 import 'package:remindme/services/tasks_repository.dart';
 import 'package:remindme/widgets/trailing_checked_menu_item.dart';
 
@@ -14,7 +16,9 @@ import 'golden_test_helper.dart';
 
 void main() {
   setUpAll(() async {
-    final robotoBytes = await File('test/fonts/roboto-regular.ttf').readAsBytes();
+    final robotoBytes = await File(
+      'test/fonts/roboto-regular.ttf',
+    ).readAsBytes();
     final robotoLoader = FontLoader('Roboto')
       ..addFont(Future<ByteData>.value(ByteData.view(robotoBytes.buffer)));
     await robotoLoader.load();
@@ -28,6 +32,50 @@ void main() {
       );
     await materialIconsLoader.load();
   });
+
+  testWidgets(
+    'home screen should hide metadata when repeating tasks are listed',
+    (tester) async {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('home_widget'),
+        (_) async => null,
+      );
+      final notes = TaskMetadata('User notes', {
+        'recurrence': {'frequency': 'daily'},
+        'operationId': 'repeat:list:old',
+      }).encode();
+      final repo = MockTasksRepository()
+        ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
+        ..mockTasks.addAll([
+          Task(
+            id: 'old',
+            title: 'Repeating task',
+            notes: notes,
+            due: '2030-01-01T00:00:00Z',
+          ),
+          Task(
+            title: 'Pending repeat',
+            notes: notes,
+            due: '2030-01-02T00:00:00Z',
+          ),
+        ])
+        ..signInMock(tasklistId: 'list-1');
+      await tester.pumpWidget(
+        ChangeNotifierProvider<TasksRepository>.value(
+          value: repo,
+          child: MaterialApp(home: const TaskHomeScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('User notes'), findsNWidgets(2));
+      expect(find.textContaining('[remindme:'), findsNothing);
+      expect(find.byIcon(Icons.repeat), findsNWidgets(2));
+      await tester.tap(find.text('Pending repeat'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit Task'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'home screen should show 7 tasks 2 overdue 1 no due date 2 today 2 future '
@@ -61,11 +109,7 @@ void main() {
           status: 'needsAction',
           due: overdue2.toIso8601String(),
         ),
-        Task(
-          id: '3',
-          title: 'Task without due date',
-          status: 'needsAction',
-        ),
+        Task(id: '3', title: 'Task without due date', status: 'needsAction'),
         Task(
           id: '4',
           title: 'Today task 1',
@@ -150,9 +194,7 @@ void main() {
       await tester.binding.runAsync(() async {
         await writeReport(
           threshold: kGoldenDiffThreshold,
-          screenshots: <String, dynamic>{
-            'home_screen': homeResult,
-          },
+          screenshots: <String, dynamic>{'home_screen': homeResult},
         );
       });
 
@@ -291,9 +333,7 @@ void main() {
       await tester.binding.runAsync(() async {
         await writeReport(
           threshold: kGoldenDiffThreshold,
-          screenshots: <String, dynamic>{
-            'sign_out_dialog': signOutResult,
-          },
+          screenshots: <String, dynamic>{'sign_out_dialog': signOutResult},
         );
       });
 
@@ -614,9 +654,7 @@ void main() {
       await tester.binding.runAsync(() async {
         await writeReport(
           threshold: kGoldenDiffThreshold,
-          screenshots: <String, dynamic>{
-            'task_home_screen_menu': menuResult,
-          },
+          screenshots: <String, dynamic>{'task_home_screen_menu': menuResult},
         );
       });
 

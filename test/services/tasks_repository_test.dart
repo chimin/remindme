@@ -1,6 +1,7 @@
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -10,9 +11,228 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:googleapis/tasks/v1.dart';
 
 import 'package:remindme/services/tasks_repository.dart';
+import 'package:remindme/services/sync_service.dart';
+import 'package:remindme/models/task_metadata.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  group('recurring tasks', () {
+    late TasksRepository repo;
+    late FakeGooglePlatform platform;
+    late Directory cache;
+    late FakeTasksServer server;
+    late DateTime due;
+
+    setUp(() async {
+      platform = FakeGooglePlatform();
+      GoogleSignInPlatform.instance = platform;
+      repo = TasksRepository();
+      cache = await Directory.systemTemp.createTemp('remindme_recurrence_');
+      SharedPreferences.setMockInitialValues({'remindme_tasklist_id': 'list'});
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('plugins.flutter.io/path_provider'),
+            (_) async => cache.path,
+          );
+      due = DateTime.utc(DateTime.now().year + 1, 1, 31);
+      server = FakeTasksServer();
+      server.tasks['old'] = Task(
+        id: 'old',
+        title: 'Water plants',
+        parent: 'parent',
+        notes: TaskMetadata('Keep the soil moist', {
+          'recurrence': {
+            'frequency': 'monthly',
+            'interval': 1,
+            'anchorDay': 31,
+          },
+          'futureFeature': {'color': 'green'},
+        }).encode(),
+        due: due.toIso8601String(),
+        status: 'needsAction',
+        updated: DateTime.now().toUtc().toIso8601String(),
+      ).toJson();
+    });
+    tearDown(() async {
+      repo.dispose();
+      await platform.events.close();
+      await Hive.close();
+      await cache.delete(recursive: true);
+    });
+
+    Future<void> run(Future<void> Function() action) =>
+        http.runWithClient(() async {
+          await repo.init();
+          await repo.signIn();
+          await repo.saveCacheEntries('list', [
+            CachedTask.fromTask(Task.fromJson(server.tasks['old']!), 'list'),
+          ]);
+          await action();
+        }, () => MockClient(server.handle));
+
+    test(
+      'complete task should retain history and clone metadata when task repeats',
+      () => run(() async {
+        await repo.completeTask('list', 'old', true);
+        final entries = await repo.getCacheEntries('list');
+        expect(entries, hasLength(2));
+        final old = entries.singleWhere((e) => e.id == 'old');
+        final next = entries.singleWhere((e) => e.id != 'old');
+        expect(old.completed, isTrue);
+        expect(old.due, due.toIso8601String());
+        expect(next.completed, isFalse);
+        expect(next.status, 'needsAction');
+        expect(next.title, old.title);
+        expect(next.parent, 'parent');
+        expect(
+          DateTime.parse(next.due!),
+          DateTime.utc(due.year, 2, DateTime.utc(due.year, 3, 0).day),
+        );
+        final metadata = TaskMetadata.parse(next.notes);
+        expect(metadata.notes, 'Keep the soil moist');
+        expect(metadata.data['futureFeature'], {'color': 'green'});
+        expect(metadata.data['previousOccurrenceId'], 'old');
+        expect(
+          metadata.data['seriesId'],
+          TaskMetadata.parse(old.notes).data['seriesId'],
+        );
+        expect(TaskMetadata.parse(old.notes).data['nextOccurrenceId'], next.id);
+        expect(server.tasks['old']!['status'], 'completed');
+        expect(server.tasks['old']!['completed'], isNotNull);
+        expect(server.events, ['PATCH old', 'GET', 'POST', 'PATCH old']);
+        expect(entries.every((e) => !e.dirty), isTrue);
+      }),
+    );
+
+    test(
+      'complete task should create one successor when completion requests overlap',
+      () => run(() async {
+        await Future.wait([
+          repo.completeTask('list', 'old', true),
+          repo.completeTask('list', 'old', true),
+          repo.pullFromRemote('list'),
+        ]);
+        expect(server.creates, 1);
+        expect(await repo.getCacheEntries('list'), hasLength(2));
+      }),
+    );
+
+    test(
+      'sync should recover both writes when completion was saved offline before restart',
+      () => run(() async {
+        server.offline = true;
+        await expectLater(
+          repo.completeTask('list', 'old', true),
+          throwsA(isA<SocketException>()),
+        );
+        final pending = await repo.getCacheEntries('list');
+        expect(pending, hasLength(2));
+        expect(pending.every((e) => e.dirty), isTrue);
+        expect(server.creates, 0);
+        final plannedDue = pending.singleWhere((e) => e.id == null).due;
+        repo.dispose();
+        await platform.events.close();
+        platform = FakeGooglePlatform();
+        GoogleSignInPlatform.instance = platform;
+        await Hive.close();
+        repo = TasksRepository();
+        await repo.init();
+        await repo.signIn();
+        server.offline = false;
+        await SyncService(repo).sync();
+        final recovered = await repo.getCacheEntries('list');
+        expect(recovered, hasLength(2));
+        expect(recovered.every((e) => !e.dirty), isTrue);
+        expect(recovered.singleWhere((e) => !e.completed).due, plannedDue);
+        expect(server.creates, 1);
+      }),
+    );
+
+    test(
+      'sync should reconcile the existing clone when create response is lost',
+      () => run(() async {
+        server.loseCreateResponse = true;
+        await expectLater(
+          repo.completeTask('list', 'old', true),
+          throwsA(isA<SocketException>()),
+        );
+        expect(server.creates, 1);
+        final pending = (await repo.getCacheEntries(
+          'list',
+        )).singleWhere((e) => e.id == null);
+        await SyncService(repo).sync();
+        expect(server.creates, 1);
+        final recovered = await repo.getCacheEntries('list');
+        expect(recovered, hasLength(2));
+        expect(recovered.singleWhere((e) => !e.completed).due, pending.due);
+        expect(recovered.every((e) => !e.dirty), isTrue);
+      }),
+    );
+
+    test(
+      'pull should clone a task when completion happened in Google Tasks',
+      () => run(() async {
+        server.tasks['old']!['status'] = 'completed';
+        server.tasks['old']!['updated'] = DateTime.now()
+            .toUtc()
+            .add(const Duration(seconds: 1))
+            .toIso8601String();
+        await repo.pullFromRemote('list');
+        expect(server.creates, 1);
+        expect(server.lastListQuery['showHidden'], 'true');
+        expect(
+          (await repo.getCacheEntries('list')).where((e) => e.completed),
+          hasLength(1),
+        );
+      }),
+    );
+
+    test(
+      'pull should respect a deleted successor when cache is rebuilt',
+      () => run(() async {
+        await repo.completeTask('list', 'old', true);
+        server.tasks.removeWhere((id, _) => id != 'old');
+        await repo.saveCacheEntries('list', []);
+        await repo.pullFromRemote('list');
+        expect(server.creates, 1);
+        expect(await repo.getCacheEntries('list'), hasLength(1));
+      }),
+    );
+
+    test(
+      'complete task should retain the series when a successor is completed',
+      () => run(() async {
+        await repo.completeTask('list', 'old', true);
+        final first = (await repo.getCacheEntries(
+          'list',
+        )).singleWhere((e) => !e.completed);
+        await repo.completeTask('list', first.id!, true);
+        final entries = await repo.getCacheEntries('list');
+        expect(entries.where((e) => e.completed), hasLength(2));
+        final next = entries.singleWhere((e) => !e.completed);
+        expect(DateTime.parse(next.due!), DateTime.utc(due.year, 3, 31));
+        expect(TaskMetadata.parse(next.notes).data['seriesId'], 'list:old');
+        expect(
+          TaskMetadata.parse(next.notes).data['previousOccurrenceId'],
+          first.id,
+        );
+        expect(TaskMetadata.parse(next.notes).data['nextOccurrenceId'], isNull);
+      }),
+    );
+
+    test(
+      'complete task should keep a single task when recurrence is absent',
+      () => run(() async {
+        final entry = (await repo.getCacheEntries(
+          'list',
+        )).single.copyWith(notes: 'Plain notes');
+        await repo.saveCacheEntries('list', [entry]);
+        await repo.completeTask('list', 'old', true);
+        expect(server.creates, 0);
+        expect((await repo.getCacheEntries('list')).single.completed, isTrue);
+      }),
+    );
+  });
   group('authentication recovery', () {
     late FakeGooglePlatform platform;
     late TasksRepository repo;
@@ -310,6 +530,58 @@ void main() {
       expect(result.first.title, 'Local only');
     },
   );
+}
+
+class FakeTasksServer {
+  final tasks = <String, Map<String, dynamic>>{};
+  final events = <String>[];
+  Map<String, String> lastListQuery = {};
+  int creates = 0;
+  bool offline = false;
+  bool loseCreateResponse = false;
+
+  Future<http.Response> handle(http.Request request) async {
+    if (offline) throw const SocketException('offline');
+    Map<String, dynamic> body;
+    switch (request.method) {
+      case 'GET':
+        events.add('GET');
+        lastListQuery = request.url.queryParameters;
+        body = {'items': tasks.values.toList()};
+      case 'PATCH':
+        final id = request.url.pathSegments.last;
+        events.add('PATCH $id');
+        body = tasks[id]!;
+        body.addAll(jsonDecode(request.body) as Map<String, dynamic>);
+        body['updated'] = DateTime.now().toUtc().toIso8601String();
+        if (body['status'] == 'completed') {
+          body['completed'] ??= body['updated'];
+        } else {
+          body.remove('completed');
+        }
+      case 'POST':
+        events.add('POST');
+        final id = 'next-${++creates}';
+        body = Map<String, dynamic>.from(jsonDecode(request.body) as Map);
+        body['id'] = id;
+        body['parent'] = request.url.queryParameters['parent'];
+        body['updated'] = DateTime.now().toUtc().toIso8601String();
+        tasks[id] = body;
+        if (loseCreateResponse) {
+          loseCreateResponse = false;
+          throw const SocketException('response lost');
+        }
+      default:
+        throw StateError(
+          'Unexpected request: ${request.method} ${request.url}',
+        );
+    }
+    return http.Response(
+      jsonEncode(body),
+      200,
+      headers: {'content-type': 'application/json'},
+    );
+  }
 }
 
 class FakeGooglePlatform extends GoogleSignInPlatform {

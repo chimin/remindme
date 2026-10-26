@@ -3,6 +3,7 @@ import 'package:googleapis/tasks/v1.dart';
 import 'package:provider/provider.dart';
 
 import '../models/task_item.dart';
+import '../models/task_metadata.dart';
 import '../services/tasks_repository.dart';
 import '../services/widget_color_service.dart';
 import '../services/widget_service.dart';
@@ -85,13 +86,14 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
             child: Text(
               group.title,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: isPast ? Colors.red : null,
-                  ),
+                fontWeight: FontWeight.bold,
+                color: isPast ? Colors.red : null,
+              ),
             ),
           ),
           ...tasks.map((task) {
             final completed = task.status == 'completed';
+            final metadata = TaskMetadata.parse(task.notes);
             return Dismissible(
               key: Key(task.id ?? 'task-${task.title.hashCode}'),
               direction: DismissDirection.endToStart,
@@ -109,13 +111,11 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
               ),
               child: InkWell(
                 onTap: () async {
-                  if (selectedId == null) return;
+                  if (selectedId == null || task.id == null) return;
                   await Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => TaskEditScreen(
-                        taskListId: selectedId,
-                        task: task,
-                      ),
+                      builder: (_) =>
+                          TaskEditScreen(taskListId: selectedId, task: task),
                     ),
                   );
                   await _refreshTasks();
@@ -125,8 +125,25 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
                     value: completed,
                     onChanged: (v) async {
                       if (task.id == null || selectedId == null) return;
-                      await _getRepo().completeTask(selectedId, task.id!, v ?? false);
-                      await _refreshTasks();
+                      try {
+                        await _getRepo().completeTask(
+                          selectedId,
+                          task.id!,
+                          v ?? false,
+                        );
+                      } catch (e, st) {
+                        logError('Task completion is waiting for sync', e, st);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'Could not sync with Google Tasks. Please try again.',
+                              ),
+                            ),
+                          );
+                        }
+                      }
+                      if (mounted) await _refreshTasks();
                     },
                   ),
                   title: Text(
@@ -135,8 +152,14 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
                       decoration: completed ? TextDecoration.lineThrough : null,
                     ),
                   ),
-                  subtitle: (task.notes != null && task.notes!.isNotEmpty)
-                      ? Text(task.notes!)
+                  trailing: metadata.frequency == null
+                      ? null
+                      : const Icon(
+                          Icons.repeat,
+                          semanticLabel: 'Repeating task',
+                        ),
+                  subtitle: metadata.notes.isNotEmpty
+                      ? Text(metadata.notes)
                       : null,
                 ),
               ),
@@ -160,9 +183,9 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     } catch (e, st) {
       logError('Failed to load tasks', e, st);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load tasks: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load tasks: $e')));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -253,11 +276,14 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     final id = repo.selectedTasklistId;
     if (id == null) return;
 
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Delete completed tasks?'),
-            content: const Text('This will permanently remove all completed tasks. This action cannot be undone.'),
+            content: const Text(
+              'This will permanently remove all completed tasks. This action cannot be undone.',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
@@ -293,7 +319,8 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
 
   Future<void> _signOut() async {
     final repo = context.read<TasksRepository>();
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Sign out?'),
@@ -388,9 +415,7 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
                   : ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.all(16.0),
-                      children: const [
-                        Center(child: Text('No tasks yet')),
-                      ],
+                      children: const [Center(child: Text('No tasks yet'))],
                     ),
             ),
       floatingActionButton: FloatingActionButton(

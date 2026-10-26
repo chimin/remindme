@@ -8,6 +8,7 @@ import 'package:googleapis/tasks/v1.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config.dart';
+import '../models/task_metadata.dart';
 import '../utils/google_config.dart';
 import '../utils/log.dart';
 import 'widget_service.dart';
@@ -34,6 +35,7 @@ class CachedTask {
     this.status,
     this.due,
     this.completed = false,
+    this.completedAt,
     this.parent,
     this.position,
     this.updatedAt,
@@ -44,6 +46,7 @@ class CachedTask {
   /// Server-assigned task id (null for a locally-created task not yet pushed).
   final String? id;
   final String tasklistId;
+
   /// Client-generated id for a pending local create.
   final String? localId;
   final String? title;
@@ -51,6 +54,7 @@ class CachedTask {
   final String? status;
   final String? due;
   final bool completed;
+  final String? completedAt;
   final String? parent;
   final String? position;
 
@@ -70,6 +74,7 @@ class CachedTask {
     String? status,
     String? due,
     bool? completed,
+    String? completedAt,
     String? parent,
     String? position,
     int? updatedAt,
@@ -85,6 +90,9 @@ class CachedTask {
       status: status ?? this.status,
       due: due ?? this.due,
       completed: completed ?? this.completed,
+      completedAt: completed != null && completed != this.completed
+          ? completedAt
+          : completedAt ?? this.completedAt,
       parent: parent ?? this.parent,
       position: position ?? this.position,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -102,6 +110,7 @@ class CachedTask {
       status: task.status,
       due: task.due,
       completed: task.status == 'completed',
+      completedAt: task.completed,
       parent: task.parent,
       position: task.position,
       updatedAt: _updatedMs(task.updated),
@@ -109,50 +118,53 @@ class CachedTask {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'tasklistId': tasklistId,
-        'localId': localId,
-        'title': title,
-        'notes': notes,
-        'status': status,
-        'due': due,
-        'completed': completed,
-        'parent': parent,
-        'position': position,
-        'updatedAt': updatedAt,
-        'isDeleted': isDeleted,
-        'dirty': dirty,
-      };
+    'id': id,
+    'tasklistId': tasklistId,
+    'localId': localId,
+    'title': title,
+    'notes': notes,
+    'status': status,
+    'due': due,
+    'completed': completed,
+    'completedAt': completedAt,
+    'parent': parent,
+    'position': position,
+    'updatedAt': updatedAt,
+    'isDeleted': isDeleted,
+    'dirty': dirty,
+  };
 
   factory CachedTask.fromJson(Map<String, dynamic> json) => CachedTask(
-        id: json['id'] as String?,
-        tasklistId: json['tasklistId'] as String? ?? '',
-        localId: json['localId'] as String?,
-        title: json['title'] as String?,
-        notes: json['notes'] as String?,
-        status: json['status'] as String?,
-        due: json['due'] as String?,
-        completed: json['completed'] as bool? ?? false,
-        parent: json['parent'] as String?,
-        position: json['position'] as String?,
-        updatedAt: json['updatedAt'] as int?,
-        isDeleted: json['isDeleted'] as bool? ?? false,
-        dirty: json['dirty'] as bool? ?? false,
-      );
+    id: json['id'] as String?,
+    tasklistId: json['tasklistId'] as String? ?? '',
+    localId: json['localId'] as String?,
+    title: json['title'] as String?,
+    notes: json['notes'] as String?,
+    status: json['status'] as String?,
+    due: json['due'] as String?,
+    completed: json['completed'] as bool? ?? false,
+    completedAt: json['completedAt'] as String?,
+    parent: json['parent'] as String?,
+    position: json['position'] as String?,
+    updatedAt: json['updatedAt'] as int?,
+    isDeleted: json['isDeleted'] as bool? ?? false,
+    dirty: json['dirty'] as bool? ?? false,
+  );
 
   /// Converts this cache entry to a Google [Task] for API calls / display.
   Task toTask() => Task(
-        id: id,
-        title: title,
-        notes: notes,
-        status: status,
-        due: due,
-        parent: parent,
-        position: position,
-        updated: updatedAt == null
-            ? null
-            : DateTime.fromMillisecondsSinceEpoch(updatedAt!).toIso8601String(),
-      );
+    id: id,
+    title: title,
+    notes: notes,
+    status: status,
+    completed: completed ? completedAt : null,
+    due: due,
+    parent: parent,
+    position: position,
+    updated: updatedAt == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(updatedAt!).toIso8601String(),
+  );
 }
 
 /// Merges [remote] into [cached] using last-write-wins by [updatedAt].
@@ -166,7 +178,9 @@ List<CachedTask> mergeTasks(
   required String tasklistId,
   int nowMs = 0,
 }) {
-  final effectiveNow = nowMs == 0 ? DateTime.now().millisecondsSinceEpoch : nowMs;
+  final effectiveNow = nowMs == 0
+      ? DateTime.now().millisecondsSinceEpoch
+      : nowMs;
   final byId = <String, CachedTask>{};
   for (final c in cached) {
     if (c.id != null) {
@@ -180,17 +194,16 @@ List<CachedTask> mergeTasks(
     final remoteMs = _updatedMs(r.updated) ?? effectiveNow;
     final existing = byId[id];
     if (existing == null) {
-      byId[id] = CachedTask.fromTask(r, tasklistId).copyWith(
-        updatedAt: remoteMs,
-        isDeleted: false,
-        dirty: false,
-      );
+      byId[id] = CachedTask.fromTask(
+        r,
+        tasklistId,
+      ).copyWith(updatedAt: remoteMs, isDeleted: false, dirty: false);
     } else if (remoteMs >= (existing.updatedAt ?? 0)) {
       // Remote wins (last-write-wins).
-      var winner = CachedTask.fromTask(r, tasklistId).copyWith(
-        updatedAt: remoteMs,
-        dirty: false,
-      );
+      var winner = CachedTask.fromTask(
+        r,
+        tasklistId,
+      ).copyWith(updatedAt: remoteMs, dirty: false);
       // Preserve a locally-requested deletion when it is newer than remote.
       if (existing.isDeleted && (existing.updatedAt ?? 0) > remoteMs) {
         winner = winner.copyWith(isDeleted: true);
@@ -200,7 +213,18 @@ List<CachedTask> mergeTasks(
     // else: local entry is newer; keep it (may be dirty or deleted).
   }
 
-  return byId.values.toList();
+  final operations = byId.values
+      .map((e) => TaskMetadata.parse(e.notes).data['operationId'])
+      .whereType<String>()
+      .toSet();
+  return [
+    ...byId.values,
+    ...cached.where(
+      (e) =>
+          e.id == null &&
+          !operations.contains(TaskMetadata.parse(e.notes).data['operationId']),
+    ),
+  ];
 }
 
 class TasksRepository extends ChangeNotifier {
@@ -223,6 +247,15 @@ class TasksRepository extends ChangeNotifier {
   String? get userPhoto => _currentUser?.photoUrl;
 
   TasksRepository();
+
+  // Keep cache read/modify/write operations and their API responses in order.
+  Future<void> _taskWork = Future.value();
+
+  Future<T> _withTaskLock<T>(Future<T> Function() action) {
+    final result = _taskWork.then((_) => action());
+    _taskWork = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return result;
+  }
 
   bool signingIn = false;
   String? authError;
@@ -415,12 +448,17 @@ class TasksRepository extends ChangeNotifier {
   Future<String> resolveDefaultTasklistId() async {
     final lists = await getTaskLists();
     if (lists.isEmpty) {
-      final created = await _tasksApi!.tasklists.insert(TaskList(title: 'Tasks'));
+      final created = await _tasksApi!.tasklists.insert(
+        TaskList(title: 'Tasks'),
+      );
       final id = created.id;
       if (id == null) throw StateError('Tasklist ID was null');
       return id;
     }
-    final named = lists.firstWhere((l) => l.title == 'Tasks', orElse: () => lists.first);
+    final named = lists.firstWhere(
+      (l) => l.title == 'Tasks',
+      orElse: () => lists.first,
+    );
     final id = named.id;
     if (id == null) throw StateError('Tasklist ID was null');
     return id;
@@ -448,16 +486,21 @@ class TasksRepository extends ChangeNotifier {
   /// On a warm cache the local copy is returned immediately and a background
   /// refresh is scheduled so subsequent reads stay fresh.
   Future<List<Task>> getTasks(String tasklistId) async {
-    final cached = await _readCacheEntries(tasklistId).then((entries) =>
-        entries.where((e) => !e.isDeleted).map((e) => e.toTask()).toList());
+    final cached = await _readCacheEntries(tasklistId).then(
+      (entries) =>
+          entries.where((e) => !e.isDeleted).map((e) => e.toTask()).toList(),
+    );
 
     if (cached.isEmpty) {
       try {
-        final remote = await _fetchRemoteTasks(tasklistId);
-        await _writeCacheEntries(tasklistId, _toCached(remote, tasklistId));
-        return remote;
+        await pullFromRemote(tasklistId);
+        return (await _entries(
+          tasklistId,
+        )).where((e) => !e.isDeleted).map((e) => e.toTask()).toList();
       } catch (_) {
-        return <Task>[];
+        return (await _entries(
+          tasklistId,
+        )).where((e) => !e.isDeleted).map((e) => e.toTask()).toList();
       }
     }
 
@@ -468,11 +511,15 @@ class TasksRepository extends ChangeNotifier {
 
   /// Pulls remote tasks for [tasklistId] and merges them into the local cache
   /// using last-write-wins (used by SyncService).
-  Future<void> pullFromRemote(String tasklistId) async {
+  Future<void> pullFromRemote(String tasklistId) =>
+      _withTaskLock(() => _pullFromRemote(tasklistId));
+
+  Future<void> _pullFromRemote(String tasklistId) async {
     final remote = await _fetchRemoteTasks(tasklistId);
     final cached = await _readCacheEntries(tasklistId);
     final merged = mergeTasks(cached, remote, tasklistId: tasklistId);
     await _writeCacheEntries(tasklistId, merged);
+    await _reconcileRecurrence(tasklistId);
   }
 
   /// Pulls remote tasks for [tasklistId] and merges them into the local cache
@@ -486,26 +533,24 @@ class TasksRepository extends ChangeNotifier {
   }
 
   Future<List<Task>> _fetchRemoteTasks(String tasklistId) => _api(() async {
-        final allTasks = <Task>[];
-        String? pageToken;
-        do {
-          final response = await _tasksApi!.tasks.list(
-            tasklistId,
-            showCompleted: true,
-            showDeleted: false,
-            pageToken: pageToken,
-            maxResults: 100,
-            $fields:
-                'nextPageToken,items(id,title,status,notes,due,completed,parent,position,updated)',
-          );
-          allTasks.addAll(response.items ?? []);
-          pageToken = response.nextPageToken;
-        } while (pageToken != null);
-        return allTasks;
-      });
-
-  List<CachedTask> _toCached(List<Task> tasks, String tasklistId) =>
-      tasks.map((t) => CachedTask.fromTask(t, tasklistId)).toList();
+    final allTasks = <Task>[];
+    String? pageToken;
+    do {
+      final response = await _tasksApi!.tasks.list(
+        tasklistId,
+        showCompleted: true,
+        showHidden: true,
+        showDeleted: false,
+        pageToken: pageToken,
+        maxResults: 100,
+        $fields:
+            'nextPageToken,items(id,title,status,notes,due,completed,parent,position,updated)',
+      );
+      allTasks.addAll(response.items ?? []);
+      pageToken = response.nextPageToken;
+    } while (pageToken != null);
+    return allTasks;
+  });
 
   /// Reads the raw cache entries (including sync state) for [tasklistId].
   Future<List<CachedTask>> getCacheEntries(String tasklistId) =>
@@ -520,9 +565,14 @@ class TasksRepository extends ChangeNotifier {
     return list.map((e) => CachedTask.fromJson(e)).toList();
   }
 
-  Future<void> _writeCacheEntries(String tasklistId, List<CachedTask> entries) async {
+  Future<void> _writeCacheEntries(
+    String tasklistId,
+    List<CachedTask> entries,
+  ) async {
     await _cacheBox?.put(
-        _cacheKey(tasklistId), entries.map((e) => e.toJson()).toList());
+      _cacheKey(tasklistId),
+      entries.map((e) => e.toJson()).toList(),
+    );
     notifyListeners();
   }
 
@@ -547,6 +597,15 @@ class TasksRepository extends ChangeNotifier {
     required String title,
     String? notes,
     DateTime? due,
+  }) => _withTaskLock(
+    () => _createTask(tasklistId, title: title, notes: notes, due: due),
+  );
+
+  Future<Task> _createTask(
+    String tasklistId, {
+    required String title,
+    String? notes,
+    DateTime? due,
   }) async {
     final localId = 'local-${DateTime.now().millisecondsSinceEpoch}';
     final entry = CachedTask(
@@ -561,24 +620,28 @@ class TasksRepository extends ChangeNotifier {
       updatedAt: DateTime.now().millisecondsSinceEpoch,
       dirty: true,
     );
-      final entries = await _entries(tasklistId)..add(entry);
-      await _writeCacheEntries(tasklistId, entries);
-      notifyListeners();
+    final entries = await _entries(tasklistId)
+      ..add(entry);
+    await _writeCacheEntries(tasklistId, entries);
+    notifyListeners();
 
-      try {
-        final created = await _api(() => _tasksApi!.tasks.insert(
-              Task(title: title, notes: notes, due: _formatDueDate(due)),
-              tasklistId,
-            ));
-        final serverEntry = CachedTask.fromTask(created, tasklistId).copyWith(
-          updatedAt:
-              _updatedMs(created.updated) ?? DateTime.now().millisecondsSinceEpoch,
-          dirty: false,
-          isDeleted: false,
-        );
-        final all = await _entries(tasklistId);
-        final idx = _indexOf(all, localId: localId);
-        if (idx != -1) all[idx] = serverEntry;
+    try {
+      final created = await _api(
+        () => _tasksApi!.tasks.insert(
+          Task(title: title, notes: notes, due: _formatDueDate(due)),
+          tasklistId,
+        ),
+      );
+      final serverEntry = CachedTask.fromTask(created, tasklistId).copyWith(
+        updatedAt:
+            _updatedMs(created.updated) ??
+            DateTime.now().millisecondsSinceEpoch,
+        dirty: false,
+        isDeleted: false,
+      );
+      final all = await _entries(tasklistId);
+      final idx = _indexOf(all, localId: localId);
+      if (idx != -1) all[idx] = serverEntry;
       await _writeCacheEntries(tasklistId, all);
       notifyListeners();
       return created;
@@ -590,29 +653,87 @@ class TasksRepository extends ChangeNotifier {
 
   /// Pushes a locally-created task to the remote API and folds the server
   /// result into the cache (used by SyncService). Does not re-add to cache.
-  Future<void> pushCreate(String tasklistId, CachedTask entry) async {
-    final created = await _api(() => _tasksApi!.tasks.insert(
-          Task(
-            title: entry.title,
-            notes: entry.notes,
-            due: entry.due,
+  Future<void> pushCreate(String tasklistId, CachedTask entry) =>
+      _withTaskLock(() => _pushCreate(tasklistId, entry));
+
+  Future<void> _pushCreate(String tasklistId, CachedTask entry) async {
+    final cached = await _entries(tasklistId);
+    final index = _indexOf(cached, localId: entry.localId);
+    if (index == -1 || cached[index].id != null || cached[index].isDeleted) {
+      return;
+    }
+    entry = cached[index];
+    final metadata = TaskMetadata.parse(entry.notes);
+    final operation = metadata.data['operationId'];
+    Task? existing;
+    if (operation != null) {
+      // A successor must not reach Google before its predecessor is completed.
+      final predecessorId = metadata.data['previousOccurrenceId'];
+      final predecessor = cached
+          .where((e) => e.id == predecessorId)
+          .firstOrNull;
+      if (predecessor != null && !predecessor.isDeleted) {
+        if (!predecessor.completed) return;
+        if (predecessor.dirty) await _pushUpdate(tasklistId, predecessor);
+      }
+      final remote = await _fetchRemoteTasks(tasklistId);
+      for (final task in remote) {
+        if (TaskMetadata.parse(task.notes).data['operationId'] == operation) {
+          existing = task;
+          break;
+        }
+      }
+    }
+    final Task created =
+        existing ??
+        await _api<Task>(
+          () => _tasksApi!.tasks.insert(
+            Task(
+              title: entry.title,
+              notes: entry.notes,
+              due: entry.due,
+              status: entry.status,
+            ),
+            tasklistId,
+            parent: entry.parent,
           ),
-          tasklistId,
-        ));
+        );
     final serverEntry = CachedTask.fromTask(created, tasklistId).copyWith(
-      updatedAt: _updatedMs(created.updated) ??
-          DateTime.now().millisecondsSinceEpoch,
+      updatedAt:
+          _updatedMs(created.updated) ?? DateTime.now().millisecondsSinceEpoch,
       dirty: false,
       isDeleted: false,
     );
     final all = await _entries(tasklistId);
     final idx = _indexOf(all, localId: entry.localId);
-    if (idx != -1) all[idx] = serverEntry;
+    if (idx != -1) {
+      all.removeAt(idx);
+      if (!all.any((e) => e.id == serverEntry.id)) all.add(serverEntry);
+    }
+    _recordSuccessor(all, serverEntry);
     await _writeCacheEntries(tasklistId, all);
-    notifyListeners();
+    await _pushRecurrenceMarkers(tasklistId);
   }
 
   Future<Task> updateTask(
+    String tasklistId,
+    String taskId, {
+    String? title,
+    String? notes,
+    bool? completed,
+    DateTime? due,
+  }) => _withTaskLock(
+    () => _updateTask(
+      tasklistId,
+      taskId,
+      title: title,
+      notes: notes,
+      completed: completed,
+      due: due,
+    ),
+  );
+
+  Future<Task> _updateTask(
     String tasklistId,
     String taskId, {
     String? title,
@@ -625,8 +746,9 @@ class TasksRepository extends ChangeNotifier {
     final idx = _indexOf(entries, serverId: taskId);
     if (idx == -1) throw StateError('Task $taskId not in cache');
     final e = entries[idx];
-    final newStatus =
-        completed == null ? e.status : (completed ? 'completed' : 'needsAction');
+    final newStatus = completed == null
+        ? e.status
+        : (completed ? 'completed' : 'needsAction');
     entries[idx] = CachedTask(
       id: e.id,
       tasklistId: e.tasklistId,
@@ -636,28 +758,34 @@ class TasksRepository extends ChangeNotifier {
       status: newStatus,
       due: due != null ? _formatDueDate(due) : e.due,
       completed: completed ?? e.completed,
+      completedAt: completed == null || completed == e.completed
+          ? e.completedAt
+          : null,
       parent: e.parent,
       position: e.position,
       updatedAt: nowMs,
       isDeleted: e.isDeleted,
       dirty: true,
     );
+    if (completed == true && !e.completed) _addNextOccurrences(entries);
     await _writeCacheEntries(tasklistId, entries);
     notifyListeners();
 
     try {
       final req = Task(
         title: title,
-        notes: notes,
+        notes: entries[idx].notes,
         status: newStatus,
         due: _formatDueDate(due),
       );
-      final updated = await _api(() => _tasksApi!.tasks.patch(req, tasklistId, taskId));
+      final updated = await _api(
+        () => _tasksApi!.tasks.patch(req, tasklistId, taskId),
+      );
       final serverEntry = CachedTask.fromTask(updated, tasklistId).copyWith(
         updatedAt: updated.updated == null
             ? nowMs
             : DateTime.tryParse(updated.updated!)?.millisecondsSinceEpoch ??
-                nowMs,
+                  nowMs,
         dirty: false,
       );
       final all = await _entries(tasklistId);
@@ -665,6 +793,7 @@ class TasksRepository extends ChangeNotifier {
       if (sidx != -1) all[sidx] = serverEntry;
       await _writeCacheEntries(tasklistId, all);
       notifyListeners();
+      await _pushOccurrences(tasklistId);
       return updated;
     } catch (e) {
       rethrow;
@@ -672,19 +801,31 @@ class TasksRepository extends ChangeNotifier {
   }
 
   /// Pushes a single local update to the remote API (used by SyncService).
-  Future<void> pushUpdate(String tasklistId, CachedTask entry) async {
+  Future<void> pushUpdate(String tasklistId, CachedTask entry) =>
+      _withTaskLock(() => _pushUpdate(tasklistId, entry));
+
+  Future<void> _pushUpdate(String tasklistId, CachedTask entry) async {
+    final cached = await _entries(tasklistId);
+    final current = _indexOf(cached, serverId: entry.id);
+    if (current == -1 || !cached[current].dirty || cached[current].isDeleted) {
+      return;
+    }
+    entry = cached[current];
     final req = Task(
       title: entry.title,
       notes: entry.notes,
       status: entry.completed ? 'completed' : 'needsAction',
+      completed: entry.completed ? entry.completedAt : null,
       due: entry.due,
     );
-    final updated = await _api(() => _tasksApi!.tasks.patch(req, tasklistId, entry.id!));
+    final updated = await _api(
+      () => _tasksApi!.tasks.patch(req, tasklistId, entry.id!),
+    );
     final serverEntry = CachedTask.fromTask(updated, tasklistId).copyWith(
       updatedAt: updated.updated == null
           ? DateTime.now().millisecondsSinceEpoch
           : DateTime.tryParse(updated.updated!)?.millisecondsSinceEpoch ??
-              DateTime.now().millisecondsSinceEpoch,
+                DateTime.now().millisecondsSinceEpoch,
       dirty: false,
     );
     final all = await _entries(tasklistId);
@@ -694,18 +835,23 @@ class TasksRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> deleteTask(String tasklistId, String taskId) async {
+  Future<void> deleteTask(String tasklistId, String taskId) =>
+      _withTaskLock(() => _deleteTask(tasklistId, taskId));
+
+  Future<void> _deleteTask(String tasklistId, String taskId) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final entries = await _entries(tasklistId);
     final idx = _indexOf(entries, serverId: taskId);
     if (idx == -1) {
-      entries.add(CachedTask(
-        id: taskId,
-        tasklistId: tasklistId,
-        updatedAt: nowMs,
-        isDeleted: true,
-        dirty: true,
-      ));
+      entries.add(
+        CachedTask(
+          id: taskId,
+          tasklistId: tasklistId,
+          updatedAt: nowMs,
+          isDeleted: true,
+          dirty: true,
+        ),
+      );
     } else {
       entries[idx] = entries[idx].copyWith(
         isDeleted: true,
@@ -729,7 +875,10 @@ class TasksRepository extends ChangeNotifier {
   }
 
   /// Pushes a single local deletion to the remote API (used by SyncService).
-  Future<void> pushDelete(String tasklistId, CachedTask entry) async {
+  Future<void> pushDelete(String tasklistId, CachedTask entry) =>
+      _withTaskLock(() => _pushDelete(tasklistId, entry));
+
+  Future<void> _pushDelete(String tasklistId, CachedTask entry) async {
     await _api(() => _tasksApi!.tasks.delete(tasklistId, entry.id!));
     final all = await _entries(tasklistId);
     all.removeWhere((e) => e.id == entry.id);
@@ -737,20 +886,134 @@ class TasksRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> completeTask(String tasklistId, String taskId, bool value) =>
-      updateTask(tasklistId, taskId, completed: value);
+  Future<void> completeTask(String tasklistId, String taskId, bool value) {
+    return _withTaskLock(() async {
+      final entries = await _entries(tasklistId);
+      final index = _indexOf(entries, serverId: taskId);
+      if (index == -1) throw StateError('Task $taskId not in cache');
+      entries[index] = entries[index].copyWith(
+        completed: value,
+        status: value ? 'completed' : 'needsAction',
+        dirty: true,
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      );
+      _addNextOccurrences(entries);
+      // One Hive write persists completion and its pending successor together.
+      await _writeCacheEntries(tasklistId, entries);
+      await _pushUpdate(tasklistId, entries[index]);
+      await _pushOccurrences(tasklistId);
+    });
+  }
+
+  void _addNextOccurrences(List<CachedTask> entries) {
+    for (final old in entries.toList()) {
+      if (!old.completed || old.isDeleted || old.id == null) continue;
+      final metadata = TaskMetadata.parse(old.notes);
+      if (metadata.data['nextOccurrenceId'] != null) continue;
+      final due = DateTime.tryParse(old.due ?? '');
+      if (due == null) continue;
+      final next = metadata.nextDue(due, DateTime.now());
+      if (next == null) continue;
+      final operation = 'repeat:${old.tasklistId}:${old.id}';
+      if (entries.any(
+        (e) => TaskMetadata.parse(e.notes).data['operationId'] == operation,
+      )) {
+        continue;
+      }
+      metadata.data['seriesId'] ??= '${old.tasklistId}:${old.id}';
+      metadata.data['nextOperationId'] = operation;
+      final oldIndex = _indexOf(entries, serverId: old.id);
+      entries[oldIndex] = old.copyWith(
+        notes: metadata.encode(),
+        dirty: true,
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      );
+      metadata.data.remove('nextOperationId');
+      metadata.data.remove('nextOccurrenceId');
+      metadata.data['previousOccurrenceId'] = old.id;
+      metadata.data['operationId'] = operation;
+      entries.add(
+        CachedTask(
+          id: null,
+          localId: operation,
+          tasklistId: old.tasklistId,
+          title: old.title,
+          notes: metadata.encode(),
+          due: _formatDueDate(next),
+          status: 'needsAction',
+          parent: old.parent,
+          dirty: true,
+          updatedAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+    }
+  }
+
+  Future<void> _pushOccurrences(String tasklistId) async {
+    for (final entry in await _entries(tasklistId)) {
+      if (entry.id == null &&
+          TaskMetadata.parse(entry.notes).data['operationId'] != null) {
+        await _pushCreate(tasklistId, entry);
+      }
+    }
+  }
+
+  Future<void> _reconcileRecurrence(String tasklistId) async {
+    final entries = await _entries(tasklistId);
+    for (final entry in entries.toList()) {
+      if (entry.id != null) _recordSuccessor(entries, entry);
+    }
+    _addNextOccurrences(entries);
+    await _writeCacheEntries(tasklistId, entries);
+    await _pushRecurrenceMarkers(tasklistId);
+    await _pushOccurrences(tasklistId);
+  }
+
+  void _recordSuccessor(List<CachedTask> entries, CachedTask successor) {
+    final metadata = TaskMetadata.parse(successor.notes);
+    final previous = metadata.data['previousOccurrenceId'];
+    if (previous is! String || successor.id == null) return;
+    final index = _indexOf(entries, serverId: previous);
+    if (index == -1 || entries[index].isDeleted) return;
+    final predecessor = entries[index];
+    final oldMetadata = TaskMetadata.parse(predecessor.notes);
+    if (oldMetadata.data['nextOccurrenceId'] != null) return;
+    oldMetadata.data['seriesId'] ??= metadata.data['seriesId'];
+    oldMetadata.data['nextOperationId'] ??=
+        'repeat:${predecessor.tasklistId}:${predecessor.id}';
+    oldMetadata.data['nextOccurrenceId'] = successor.id;
+    entries[index] = predecessor.copyWith(
+      notes: oldMetadata.encode(),
+      dirty: true,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  Future<void> _pushRecurrenceMarkers(String tasklistId) async {
+    for (final entry in await _entries(tasklistId)) {
+      if (entry.id != null &&
+          entry.dirty &&
+          !entry.isDeleted &&
+          TaskMetadata.parse(entry.notes).data['nextOperationId'] != null) {
+        await _pushUpdate(tasklistId, entry);
+      }
+    }
+  }
 
   Future<void> deleteCompletedTasks(String tasklistId) async {
     final tasks = await getTasks(tasklistId);
-    final completed = tasks.where((t) => t.status == 'completed' && t.id != null);
+    final completed = tasks.where(
+      (t) => t.status == 'completed' && t.id != null,
+    );
     for (final task in completed) {
       await deleteTask(tasklistId, task.id!);
     }
     notifyListeners();
   }
 
-  static String? _formatDueDate(DateTime? due) =>
-      due == null ? null : DateTime.utc(due.year, due.month, due.day).toIso8601String();
+  static String? _formatDueDate(DateTime? due) => due == null
+      ? null
+      : DateTime.utc(due.year, due.month, due.day).toIso8601String();
 
   @override
   void dispose() {
