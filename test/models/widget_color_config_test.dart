@@ -6,10 +6,10 @@ void main() {
   test('construct should use defaults when no args', () {
     const config = WidgetColorConfig();
 
-    expect(config.textColor, 0xFF000000);
-    expect(config.backgroundColor, 0xFFFFFFFF);
-    expect(config.backgroundAlpha, 0x80);
-    expect(config.overdueColor, 0xFFF44336);
+    expect(config.textColor, 0xFF211B2B);
+    expect(config.backgroundColor, 0xFFFAF8FC);
+    expect(config.backgroundAlpha, 0xF2);
+    expect(config.overdueColor, 0xFFB73545);
   });
 
   test('copyWith should override only provided fields', () {
@@ -42,14 +42,14 @@ void main() {
   test('fromJsonString should use defaults when json is invalid', () {
     final config = WidgetColorConfig.fromJsonString('not json');
 
-    expect(config.textColor, 0xFF000000);
-    expect(config.overdueColor, 0xFFF44336);
+    expect(config.textColor, 0xFF211B2B);
+    expect(config.overdueColor, 0xFFB73545);
   });
 
   test('fromJsonString should use defaults when json is missing keys', () {
     final config = WidgetColorConfig.fromJsonString('{"textColor":255}');
 
     expect(config.textColor, 255);
-    expect(config.overdueColor, 0xFFF44336);
+    expect(config.overdueColor, 0xFFB73545);
   });
 }

@@ -44,7 +44,14 @@ void main() {
       expect(dates.where((date) => date.isBefore(today)), hasLength(1));
       expect(dates.where((date) => date == today), hasLength(1));
       expect(dates.where((date) => date.isAfter(today)).toSet(), hasLength(2));
+      final scrollable = tester.state<ScrollableState>(
+        find.byType(Scrollable).first,
+      );
       for (final task in tasks) {
+        if (find.text(task.title!).evaluate().isEmpty) {
+          scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+          await tester.pumpAndSettle();
+        }
         expect(find.text(task.title!), findsOneWidget);
       }
       final widgetTasks = payloads.last

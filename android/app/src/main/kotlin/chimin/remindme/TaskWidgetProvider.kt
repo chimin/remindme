@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.view.View
@@ -55,9 +56,9 @@ class TaskWidgetProvider : AppWidgetProvider() {
 
   private fun loadColorConfig(prefs: SharedPreferences?): WidgetColorConfig {
     val defaults = WidgetColorConfig(
-      textColor = 0xFF000000.toInt(),
-      overdueColor = 0xFFF44336.toInt(),
-      backgroundColor = 0x80FFFFFF.toInt(),
+      textColor = 0xFF211B2B.toInt(),
+      overdueColor = 0xFFB73545.toInt(),
+      backgroundColor = 0xF2FAF8FC.toInt(),
     )
     if (prefs == null) return defaults
     val raw = prefs.getString(CONFIG_KEY, null) ?: return defaults
@@ -65,8 +66,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
       val obj = JSONObject(raw)
       val text = obj.optInt("textColor", defaults.textColor)
       val overdue = obj.optInt("overdueColor", defaults.overdueColor)
-      val bg = obj.optInt("backgroundColor", 0xFFFFFFFF.toInt())
-      val alpha = obj.optInt("backgroundAlpha", 0x80)
+      val bg = obj.optInt("backgroundColor", 0xFFFAF8FC.toInt())
+      val alpha = obj.optInt("backgroundAlpha", 0xF2)
       WidgetColorConfig(
         textColor = text,
         overdueColor = overdue,
@@ -147,7 +148,6 @@ class TaskWidgetProvider : AppWidgetProvider() {
       "tasklist" -> RemoteViews(pkg, R.layout.task_widget_title).apply {
         setTextViewText(R.id.task_list_title, item.title)
         setInt(R.id.task_list_title, "setTextColor", colorConfig.textColor)
-        setInt(R.id.task_list_title, "setBackgroundColor", colorConfig.backgroundColor)
         if (pending != null) setOnClickPendingIntent(R.id.task_list_title, pending)
       }
       "header" -> RemoteViews(pkg, R.layout.task_widget_group).apply {
@@ -162,7 +162,6 @@ class TaskWidgetProvider : AppWidgetProvider() {
           },
         )
         if (pending != null) setOnClickPendingIntent(R.id.group_title, pending)
-        setInt(R.id.group_title, "setBackgroundColor", colorConfig.backgroundColor)
       }
       else -> RemoteViews(pkg, R.layout.task_widget_item).apply {
         setTextViewText(R.id.title, item.title)
@@ -180,7 +179,6 @@ class TaskWidgetProvider : AppWidgetProvider() {
         } else {
           setInt(R.id.title, "setTextColor", colorConfig.textColor)
         }
-        setInt(R.id.task_item_root, "setBackgroundColor", colorConfig.backgroundColor)
         if (pending != null) setOnClickPendingIntent(R.id.task_item_root, pending)
       }
     }
@@ -188,12 +186,13 @@ class TaskWidgetProvider : AppWidgetProvider() {
 
   private fun buildBaseViews(context: Context, pending: PendingIntent?, colorConfig: WidgetColorConfig): RemoteViews {
     return RemoteViews(context.packageName, R.layout.task_widget).apply {
+      setInt(R.id.widget_background, "setColorFilter", colorConfig.backgroundColor or 0xFF000000.toInt())
+      setInt(R.id.widget_background, "setImageAlpha", colorConfig.backgroundColor ushr 24)
       if (pending != null) {
         setOnClickPendingIntent(R.id.widget_root, pending)
         setOnClickPendingIntent(R.id.empty_view, pending)
       }
       setInt(R.id.empty_view, "setTextColor", colorConfig.textColor)
-      setInt(R.id.empty_view, "setBackgroundColor", colorConfig.backgroundColor)
       setViewVisibility(R.id.empty_view, View.VISIBLE)
     }
   }
@@ -224,10 +223,11 @@ class TaskWidgetProvider : AppWidgetProvider() {
     for (widgetId in appWidgetIds) {
       val views = RemoteViews(context.packageName, R.layout.task_widget)
       try {
+        views.setInt(R.id.widget_background, "setColorFilter", colorConfig.backgroundColor or 0xFF000000.toInt())
+        views.setInt(R.id.widget_background, "setImageAlpha", colorConfig.backgroundColor ushr 24)
         // Set task list title from data
         views.setTextViewText(R.id.task_list_title, taskListTitle)
         views.setInt(R.id.task_list_title, "setTextColor", colorConfig.textColor)
-        views.setInt(R.id.task_list_title, "setBackgroundColor", colorConfig.backgroundColor)
         if (pending != null) {
           views.setOnClickPendingIntent(R.id.task_list_title, pending)
         }
@@ -235,6 +235,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
         // Set up scrollable list adapter for task items (groups + tasks)
         val listIntent = Intent(context, TaskWidgetService::class.java).apply {
           putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+          data = Uri.parse("remindme://widget/$widgetId")
         }
         views.setRemoteAdapter(R.id.task_list, listIntent)
 
@@ -248,12 +249,12 @@ class TaskWidgetProvider : AppWidgetProvider() {
         )
 
         views.setInt(R.id.empty_view, "setTextColor", colorConfig.textColor)
-        views.setInt(R.id.empty_view, "setBackgroundColor", colorConfig.backgroundColor)
         if (pending != null) {
           views.setOnClickPendingIntent(R.id.widget_root, pending)
           views.setOnClickPendingIntent(R.id.empty_view, pending)
         }
         appWidgetManager.updateAppWidget(widgetId, views)
+        appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.task_list)
       } catch (e: Exception) {
         Log.e(TAG, "Failed to update widget $widgetId, rendering fallback", e)
         val fallback = buildBaseViews(context, pending, colorConfig)

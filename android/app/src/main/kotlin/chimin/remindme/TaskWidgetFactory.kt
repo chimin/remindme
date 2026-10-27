@@ -32,9 +32,9 @@ class TaskWidgetFactory(context: Context, intent: Intent) : RemoteViewsService.R
   )
 
   private var colorConfig = WidgetColorConfig(
-    textColor = 0xFF000000.toInt(),
-    overdueColor = 0xFFF44336.toInt(),
-    backgroundColor = 0x80FFFFFF.toInt(),
+    textColor = 0xFF211B2B.toInt(),
+    overdueColor = 0xFFB73545.toInt(),
+    backgroundColor = 0xF2FAF8FC.toInt(),
   )
 
   init {
@@ -51,10 +51,10 @@ class TaskWidgetFactory(context: Context, intent: Intent) : RemoteViewsService.R
     val raw = prefs.getString("task_widget_config", null) ?: return
     try {
       val obj = JSONObject(raw)
-      val text = obj.optInt("textColor", 0xFF000000.toInt())
-      val overdue = obj.optInt("overdueColor", 0xFFF44336.toInt())
-      val bg = obj.optInt("backgroundColor", 0xFFFFFFFF.toInt())
-      val alpha = obj.optInt("backgroundAlpha", 0x80)
+      val text = obj.optInt("textColor", 0xFF211B2B.toInt())
+      val overdue = obj.optInt("overdueColor", 0xFFB73545.toInt())
+      val bg = obj.optInt("backgroundColor", 0xFFFAF8FC.toInt())
+      val alpha = obj.optInt("backgroundAlpha", 0xF2)
       colorConfig = WidgetColorConfig(
         textColor = text,
         overdueColor = overdue,
@@ -66,6 +66,7 @@ class TaskWidgetFactory(context: Context, intent: Intent) : RemoteViewsService.R
   }
 
   override fun onDataSetChanged() {
+    loadColorConfig()
     loadItems()
   }
 
@@ -90,7 +91,6 @@ class TaskWidgetFactory(context: Context, intent: Intent) : RemoteViewsService.R
         } else {
           views.setInt(R.id.group_title, "setTextColor", colorConfig.textColor)
         }
-        views.setInt(R.id.group_title, "setBackgroundColor", colorConfig.backgroundColor)
       }
       else -> {
         views.setTextViewText(R.id.title, item.title)
@@ -100,7 +100,6 @@ class TaskWidgetFactory(context: Context, intent: Intent) : RemoteViewsService.R
         )
         views.setInt(R.id.checkbox, "setTextColor", colorConfig.textColor)
         views.setInt(R.id.title, "setTextColor", colorConfig.textColor)
-        views.setInt(R.id.task_item_root, "setBackgroundColor", colorConfig.backgroundColor)
       }
     }
     return views

@@ -15,24 +15,23 @@ void main() {
     calls.clear();
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(
-      MethodChannel('home_widget'),
-      (call) async {
-        calls.add(call);
-        if (call.method == 'getWidgetData') {
-          final args = (call.arguments as Map).cast<String, dynamic>();
-          return args['id'] == WidgetColorService.configKey
-              ? jsonEncode({
-                  'textColor': 0xFF102030,
-                  'backgroundColor': 0xFF445566,
-                  'backgroundAlpha': 0x77,
-                  'overdueColor': 0xFF778899,
-                })
-              : null;
-        }
-        return true;
-      },
-    );
+    messenger.setMockMethodCallHandler(MethodChannel('home_widget'), (
+      call,
+    ) async {
+      calls.add(call);
+      if (call.method == 'getWidgetData') {
+        final args = (call.arguments as Map).cast<String, dynamic>();
+        return args['id'] == WidgetColorService.configKey
+            ? jsonEncode({
+                'textColor': 0xFF102030,
+                'backgroundColor': 0xFF445566,
+                'backgroundAlpha': 0x77,
+                'overdueColor': 0xFF778899,
+              })
+            : null;
+      }
+      return true;
+    });
   });
 
   tearDown(() {
@@ -51,10 +50,10 @@ void main() {
 
     final config = await WidgetColorService.loadConfig();
 
-    expect(config.textColor, 0xFF000000);
-    expect(config.backgroundColor, 0xFFFFFFFF);
-    expect(config.backgroundAlpha, 0x80);
-    expect(config.overdueColor, 0xFFF44336);
+    expect(config.textColor, 0xFF211B2B);
+    expect(config.backgroundColor, 0xFFFAF8FC);
+    expect(config.backgroundAlpha, 0xF2);
+    expect(config.overdueColor, 0xFFB73545);
   });
 
   test('loadConfig should return saved config', () async {

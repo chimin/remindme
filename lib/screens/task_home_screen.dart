@@ -16,14 +16,6 @@ import 'widget_color_config_dialog.dart';
 /// Actions available from the app bar overflow menu.
 enum _AppBarAction { toggleCompleted, widgetColors, deleteCompleted, signOut }
 
-/// Vertical nudge applied to the overflow menu so its top edge lines up with
-/// the top edge of the task list menu.
-///
-/// The overflow button is a 48px icon button whose icon is centred in the
-/// toolbar, while the title button only wraps the title line, so anchoring
-/// both menus with [PopupMenuPosition.under] leaves them 2px apart.
-const double _kOverflowMenuOffset = -2;
-
 /// Home screen listing the tasks of the selected Google task list.
 ///
 /// The app bar exposes two Material popup menus that share the same styling:
@@ -44,6 +36,7 @@ class TaskHomeScreen extends StatefulWidget {
 
 class _TaskHomeScreenState extends State<TaskHomeScreen> {
   bool _loading = false;
+  final Set<String> _collapsedGroups = {};
   List<TaskList> _taskLists = [];
   List<Task> _tasks = [];
 
@@ -56,8 +49,109 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     _loadData();
   }
 
-  List<TaskGroup> _groupTasks({required bool showCompleted}) =>
-      groupTasksByDueDate(_tasks, DateTime.now(), showCompleted: showCompleted);
+  List<TaskGroup> _groupTasks({required bool showCompleted}) {
+    final now = DateTime.now();
+    final filtered = _tasks;
+    final groups = groupTasksByDueDate(filtered, now, showCompleted: false);
+    final completed = filtered
+        .where((task) => task.status == 'completed')
+        .toList();
+    if (showCompleted && completed.isNotEmpty) {
+      groups.add(
+        TaskGroup(title: 'Completed', category: 'completed', tasks: completed),
+      );
+    }
+    return groups;
+  }
+
+  Widget _buildGroupHeader(TaskGroup group) {
+    final theme = Theme.of(context);
+    final collapsible =
+        group.category == 'overdue' || group.category == 'noDueDate';
+    final showCount = collapsible || group.category == 'today';
+    final collapsed = _collapsedGroups.contains(group.category);
+    final overdue = group.category == 'overdue';
+    final parsed = DateTime.tryParse(group.title);
+    final title = parsed == null
+        ? group.title
+        : formatTaskDate(parsed, DateTime.now());
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: overdue
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          if (showCount)
+            Text(
+              group.tasks.length.toString(),
+              key: ValueKey('category_count_${group.category}'),
+              style: TextStyle(
+                color: overdue
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          if (collapsible) ...[
+            const SizedBox(width: 12),
+            Icon(collapsed ? Icons.expand_more : Icons.expand_less, size: 20),
+          ],
+        ],
+      ),
+    );
+    return Padding(
+      key: ValueKey('category_${group.category}_${group.title}'),
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: Material(
+        color: overdue
+            ? theme.colorScheme.errorContainer.withValues(alpha: 0.5)
+            : theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        child: collapsible
+            ? InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => setState(() {
+                  if (collapsed) {
+                    _collapsedGroups.remove(group.category);
+                  } else {
+                    _collapsedGroups.add(group.category);
+                  }
+                }),
+                child: content,
+              )
+            : content,
+      ),
+    );
+  }
+
+  Widget? _taskSubtitle(Task task, TaskMetadata metadata) {
+    final date = DateTime.tryParse(task.due ?? '');
+    final labels = <String>[
+      if (date != null) formatTaskDate(date, DateTime.now()),
+      if (metadata.frequency != null) 'Repeats ${metadata.frequency!}',
+    ];
+    if (labels.isEmpty && metadata.notes.isEmpty) return null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (labels.isNotEmpty)
+          Text(
+            labels.join(' · '),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        if (metadata.notes.isNotEmpty)
+          Text(metadata.notes, maxLines: 2, overflow: TextOverflow.ellipsis),
+      ],
+    );
+  }
 
   /// Title of the currently selected task list, used as the widget title.
   ///
@@ -76,95 +170,94 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     final selectedId = _getSelectedId();
 
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
       children: groups.expand((group) {
         final tasks = group.tasks;
-        final isPast = group.category == 'overdue';
 
         return [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text(
-              group.title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: isPast ? Colors.red : null,
-              ),
-            ),
-          ),
-          ...tasks.map((task) {
-            final completed = task.status == 'completed';
-            final metadata = TaskMetadata.parse(task.notes);
-            return Dismissible(
-              key: Key(task.id ?? 'task-${task.title.hashCode}'),
-              direction: DismissDirection.endToStart,
-              confirmDismiss: (_) async => task.id != null,
-              onDismissed: (_) async {
-                if (task.id == null || selectedId == null) return;
-                await _getRepo().deleteTask(selectedId, task.id!);
-                await _refreshTasks();
-              },
-              background: Container(
-                alignment: Alignment.centerRight,
-                color: Colors.red,
-                padding: const EdgeInsets.only(right: 16),
-                child: const Icon(Icons.delete, color: Colors.white),
-              ),
-              child: InkWell(
-                onTap: () async {
-                  if (selectedId == null || task.id == null) return;
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          TaskEditScreen(taskListId: selectedId, task: task),
-                    ),
-                  );
+          _buildGroupHeader(group),
+          if (!_collapsedGroups.contains(group.category))
+            ...tasks.map((task) {
+              final completed = task.status == 'completed';
+              final metadata = TaskMetadata.parse(task.notes);
+              return Dismissible(
+                key: Key(task.id ?? 'task-${task.title.hashCode}'),
+                direction: DismissDirection.endToStart,
+                confirmDismiss: (_) async => task.id != null,
+                onDismissed: (_) async {
+                  if (task.id == null || selectedId == null) return;
+                  await _getRepo().deleteTask(selectedId, task.id!);
                   await _refreshTasks();
                 },
-                child: ListTile(
-                  leading: Checkbox(
-                    value: completed,
-                    onChanged: (v) async {
-                      if (task.id == null || selectedId == null) return;
-                      try {
-                        await _getRepo().completeTask(
-                          selectedId,
-                          task.id!,
-                          v ?? false,
-                        );
-                      } catch (e, st) {
-                        logError('Task completion is waiting for sync', e, st);
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Could not sync with Google Tasks. Please try again.',
-                              ),
-                            ),
-                          );
-                        }
-                      }
-                      if (mounted) await _refreshTasks();
-                    },
-                  ),
-                  title: Text(
-                    task.title ?? '(no title)',
-                    style: TextStyle(
-                      decoration: completed ? TextDecoration.lineThrough : null,
-                    ),
-                  ),
-                  trailing: metadata.frequency == null
-                      ? null
-                      : const Icon(
-                          Icons.repeat,
-                          semanticLabel: 'Repeating task',
-                        ),
-                  subtitle: metadata.notes.isNotEmpty
-                      ? Text(metadata.notes)
-                      : null,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  color: Colors.red,
+                  padding: const EdgeInsets.only(right: 16),
+                  child: const Icon(Icons.delete, color: Colors.white),
                 ),
-              ),
-            );
-          }),
+                child: InkWell(
+                  onTap: () async {
+                    if (selectedId == null || task.id == null) return;
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            TaskEditScreen(taskListId: selectedId, task: task),
+                      ),
+                    );
+                    await _refreshTasks();
+                  },
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    minVerticalPadding: 8,
+                    leading: Checkbox(
+                      value: completed,
+                      onChanged: (v) async {
+                        if (task.id == null || selectedId == null) return;
+                        try {
+                          await _getRepo().completeTask(
+                            selectedId,
+                            task.id!,
+                            v ?? false,
+                          );
+                        } catch (e, st) {
+                          logError(
+                            'Task completion is waiting for sync',
+                            e,
+                            st,
+                          );
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Could not sync with Google Tasks. Please try again.',
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                        if (mounted) await _refreshTasks();
+                      },
+                    ),
+                    title: Text(
+                      task.title ?? '(no title)',
+                      style: TextStyle(
+                        decoration: completed
+                            ? TextDecoration.lineThrough
+                            : null,
+                      ),
+                    ),
+                    trailing: metadata.frequency == null
+                        ? null
+                        : const Icon(
+                            Icons.repeat,
+                            semanticLabel: 'Repeating task',
+                          ),
+                    subtitle: _taskSubtitle(task, metadata),
+                  ),
+                ),
+              );
+            }),
         ];
       }).toList(),
     );
@@ -275,12 +368,21 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     final repo = context.read<TasksRepository>();
     final id = repo.selectedTasklistId;
     if (id == null) return;
+    final count = _tasks.where((task) => task.status == 'completed').length;
+    if (count == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No completed tasks to delete')),
+      );
+      return;
+    }
 
     final confirmed =
         await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Delete completed tasks?'),
+            title: Text(
+              'Clear $count completed ${count == 1 ? 'task' : 'tasks'}?',
+            ),
             content: const Text(
               'This will permanently remove all completed tasks. This action cannot be undone.',
             ),
@@ -289,10 +391,13 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
                 onPressed: () => Navigator.of(context).pop(false),
                 child: const Text('Cancel'),
               ),
-              TextButton(
+              FilledButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('Delete'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
+                ),
+                child: Text('Delete $count ${count == 1 ? 'task' : 'tasks'}'),
               ),
             ],
           ),
@@ -301,7 +406,7 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
 
     if (!confirmed || !mounted) return;
 
-    final progress = ValueNotifier<String>('Preparing deletion…');
+    final progress = ValueNotifier<String>('Preparing deletion...');
     final navigator = Navigator.of(context, rootNavigator: true);
     final dialog = DialogRoute<void>(
       context: context,
@@ -330,7 +435,7 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
         id,
         onProgress: (deleted, total) {
           if (!mounted) return;
-          progress.value = '$deleted/$total';
+          progress.value = '$deleted of $total deleted';
         },
       );
       await _refreshTasks();
@@ -387,7 +492,9 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        titleSpacing: 16,
         title: PopupMenuButton<String>(
+          padding: EdgeInsets.zero,
           position: PopupMenuPosition.under,
           tooltip: 'Change task list',
           onOpened: () {
@@ -398,17 +505,20 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(selectedList.title ?? 'Tasks'),
+              SizedBox(
+                height: 48,
+                child: Center(child: Text(selectedList.title ?? 'Tasks')),
+              ),
               const Icon(Icons.arrow_drop_down),
             ],
           ),
         ),
         actions: [
           PopupMenuButton<_AppBarAction>(
-            icon: const Icon(Icons.more_vert),
+            padding: EdgeInsets.zero,
             tooltip: 'Menu',
             position: PopupMenuPosition.under,
-            offset: const Offset(0, _kOverflowMenuOffset),
+
             onSelected: _handleAppBarAction,
             itemBuilder: (context) => [
               TrailingCheckedMenuItem<_AppBarAction>(
@@ -419,7 +529,7 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
               const PopupMenuDivider(),
               const PopupMenuItem(
                 value: _AppBarAction.widgetColors,
-                child: Text('Widget colors'),
+                child: Text('Widget appearance'),
               ),
               const PopupMenuItem(
                 value: _AppBarAction.deleteCompleted,
@@ -430,6 +540,11 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
                 child: Text('Sign out'),
               ),
             ],
+            child: const SizedBox(
+              width: 48,
+              height: 48,
+              child: Icon(Icons.more_vert),
+            ),
           ),
         ],
       ),
@@ -444,8 +559,28 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
                   ? _buildGroupedTaskList(groups: groups)
                   : ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(16.0),
-                      children: const [Center(child: Text('No tasks yet'))],
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        const SizedBox(height: 40),
+                        Icon(
+                          Icons.task_alt_rounded,
+                          size: 64,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(height: 16),
+                        Center(
+                          child: Text(
+                            'No tasks yet',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Center(
+                          child: Text(
+                            'Make room for what matters. Add a task.',
+                          ),
+                        ),
+                      ],
                     ),
             ),
       floatingActionButton: FloatingActionButton(

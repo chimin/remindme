@@ -40,7 +40,11 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider<TasksRepository>.value(
           value: repo,
-          child: const MaterialApp(home: AuthRouter()),
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
+            home: const AuthRouter(),
+          ),
         ),
       );
       await repo.init();
@@ -50,7 +54,7 @@ void main() {
       expect(find.byType(LoginScreen), findsOneWidget);
       expect(find.text('Unable to sign in. Please try again.'), findsOneWidget);
       expect(
-        tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed,
         isNotNull,
       );
       final result = await captureAndCompare(
@@ -73,7 +77,9 @@ void main() {
     (tester) async {
       tester.view.devicePixelRatio = 1.0;
       tester.view.physicalSize = const Size(800, 600);
-      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pumpWidget(
+        const MaterialApp(debugShowCheckedModeBanner: false, home: SizedBox()),
+      );
       expect(tester.view.devicePixelRatio, 1.0);
       expect(tester.view.physicalSize, const Size(800, 600));
       expect(
@@ -93,21 +99,25 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider<TasksRepository>.value(
           value: repo,
-          child: const MaterialApp(home: LoginScreen()),
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
+            home: const LoginScreen(),
+          ),
         ),
       );
       await tester.tap(find.text('Continue with Google'));
       await tester.pump();
       expect(find.text('Signing in...'), findsOneWidget);
       expect(
-        tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed,
         isNull,
       );
       repo.pending.complete();
       await tester.pumpAndSettle();
       expect(find.text('Continue with Google'), findsOneWidget);
       expect(
-        tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed,
         isNotNull,
       );
     },
@@ -131,11 +141,8 @@ void main() {
         child: RepaintBoundary(
           key: boundaryKey,
           child: MaterialApp(
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-              useMaterial3: true,
-              fontFamily: 'Roboto',
-            ),
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
             home: const AuthRouter(),
           ),
         ),

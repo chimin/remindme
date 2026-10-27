@@ -45,3 +45,22 @@ tasks.register<WidgetScreenshotTask>("screenshotTests") {
     dependsOn(":app:assembleDebug")
     dependsOn(":app:assembleDebugAndroidTest")
 }
+/** Regenerate branding explicitly; normal builds use checked-in images. */
+tasks.register<UpdateBrandingTask>("updateBranding") {
+    group = "branding"
+    description = "Generate Android/iOS app icons and Play Store branding images."
+    iconSource.set(rootProject.file(
+        providers.gradleProperty("brandingIconSource").getOrElse(
+            "../ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png"
+        )
+    ))
+    featureSource.set(rootProject.file(
+        providers.gradleProperty("brandingFeatureSource").getOrElse(
+            "../assets/branding/play-store-feature-graphic.png"
+        )
+    ))
+    iconCatalog.set(rootProject.file("../ios/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json"))
+    outputDirectory.set(rootProject.file(
+        providers.gradleProperty("brandingOutputDir").getOrElse("..")
+    ))
+}

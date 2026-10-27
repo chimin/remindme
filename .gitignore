@@ -47,3 +47,5 @@ app.*.map.json
 /test/reports/
 
 /.kilo
+# Generated previews and temporary review artifacts
+/output/

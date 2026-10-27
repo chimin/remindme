@@ -1,3 +1,4 @@
+import 'package:remindme/main.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -52,11 +53,8 @@ void main() {
         child: RepaintBoundary(
           key: boundaryKey,
           child: MaterialApp(
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-              useMaterial3: true,
-              fontFamily: 'Roboto',
-            ),
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
             home: TaskEditScreen(taskListId: 'list-1'),
           ),
         ),
@@ -64,9 +62,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('New Task'), findsOneWidget);
+    expect(find.text('New task'), findsOneWidget);
     expect(find.byType(TextFormField), findsOneWidget);
-    expect(find.text('Save'), findsOneWidget);
+    expect(find.text('Create task'), findsOneWidget);
 
     await expectLater(
       find.byKey(boundaryKey),
@@ -83,11 +81,8 @@ void main() {
       ChangeNotifierProvider<TasksRepository>.value(
         value: repo,
         child: MaterialApp(
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-            useMaterial3: true,
-            fontFamily: 'Roboto',
-          ),
+          debugShowCheckedModeBanner: false,
+          theme: createAppTheme(),
           home: RepaintBoundary(
             key: const ValueKey('editor'),
             child: TaskEditScreen(taskListId: 'list-1', task: task),
@@ -125,7 +120,7 @@ void main() {
         find.byKey(const ValueKey('editor')),
         matchesGoldenFile('golden/task_edit_screen_repeat.png'),
       );
-      await tester.tap(find.text('Save'));
+      await tester.tap(find.byType(FilledButton));
       await tester.pumpAndSettle();
       final saved = TaskMetadata.parse(repo.saved!.notes);
       expect(saved.data['futureFeature'], {'color': 'green'});
@@ -148,7 +143,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Daily').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
     expect(find.text('Choose a due date for repeating tasks'), findsOneWidget);
     expect(repo.saved, isNull);
@@ -175,7 +170,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Never').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
     final saved = TaskMetadata.parse(repo.saved!.notes);
     expect(saved.data.containsKey('recurrence'), isFalse);
@@ -197,7 +192,7 @@ void main() {
         notes: TaskMetadata('Notes', {'recurrence': rule}).encode(),
       ),
     );
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
     expect(TaskMetadata.parse(repo.saved!.notes).data['recurrence'], rule);
   });
@@ -210,11 +205,58 @@ void main() {
       addTearDown(tester.view.resetViewInsets);
       await pumpEditor(tester, repo);
       await tester.enterText(find.byType(TextFormField), 'Water plants');
-      await tester.ensureVisible(find.text('Save'));
-      await tester.tap(find.text('Save'));
+      await tester.ensureVisible(find.byType(FilledButton));
+      await tester.tap(find.byType(FilledButton));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(repo.saved!.title, 'Water plants');
+    },
+  );
+  testWidgets(
+    'due date should open the picker from the field surface when tapped',
+    (tester) async {
+      final repo = RecordingTasksRepository();
+      await pumpEditor(
+        tester,
+        repo,
+        task: Task(id: 'task', title: 'Water plants'),
+      );
+      final field = find.byKey(const ValueKey('due_date_field'));
+      final titleField = find.byType(TextFormField);
+      final repeatField = find.byType(DropdownButtonFormField<String>);
+      expect(
+        tester.getSize(field).height,
+        closeTo(tester.getSize(titleField).height, 1),
+      );
+      expect(
+        tester.getSize(field).height,
+        closeTo(tester.getSize(repeatField).height, 1),
+      );
+
+      for (final offset in [const Offset(8, 8), const Offset(100, 32)]) {
+        await tester.tapAt(tester.getTopLeft(field) + offset);
+        await tester.pumpAndSettle();
+        expect(find.byType(DatePickerDialog), findsOneWidget);
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('No due date'));
+      await tester.pumpAndSettle();
+      expect(find.byType(DatePickerDialog), findsOneWidget);
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(find.text('Today'), findsOneWidget);
+      expect(
+        tester.getSize(field).height,
+        closeTo(tester.getSize(titleField).height, 1),
+      );
+      await tester.tap(find.byTooltip('Clear due date'));
+      await tester.pumpAndSettle();
+      expect(find.text('No due date'), findsOneWidget);
+      expect(find.byType(DatePickerDialog), findsNothing);
+      await tester.tap(find.byType(FilledButton));
+      await tester.pumpAndSettle();
+      expect(repo.saved!.due, isNull);
     },
   );
 }

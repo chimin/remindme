@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../services/tasks_repository.dart';
 import '../models/task_metadata.dart';
 import '../utils/log.dart';
+import '../utils/task_grouping.dart';
 
 class TaskEditScreen extends StatefulWidget {
   final String taskListId;
@@ -147,104 +148,129 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Edit Task' : 'New Task'),
+        title: Text(_isEditing ? 'Edit task' : 'New task'),
         actions: [
           if (_isEditing)
-            IconButton(icon: const Icon(Icons.delete), onPressed: _delete),
+            IconButton(
+              tooltip: 'Delete task',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _saving ? null : _delete,
+            ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: IntrinsicHeight(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TextFormField(
-                        controller: _titleController,
-                        decoration: const InputDecoration(labelText: 'Title'),
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'Title is required'
-                            : null,
-                        autofocus: !_isEditing,
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _notesController,
-                        decoration: const InputDecoration(labelText: 'Notes'),
-                        maxLines: 3,
-                      ),
-                      const SizedBox(height: 16),
-                      InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Due date',
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: IntrinsicHeight(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextFormField(
+                          controller: _titleController,
+                          decoration: const InputDecoration(
+                            labelText: 'Title',
+                            hintText: 'What do you need to do?',
+                          ),
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Title is required'
+                              : null,
+                          autofocus: !_isEditing,
                         ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _dueDate == null
-                                    ? 'No due date'
-                                    : _dueDate!.toIso8601String().split('T')[0],
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _notesController,
+                          decoration: const InputDecoration(
+                            labelText: 'Notes',
+                            hintText: 'Add a few details',
+                          ),
+                          maxLines: 3,
+                        ),
+                        const SizedBox(height: 16),
+                        InkWell(
+                          key: const ValueKey('due_date_field'),
+                          onTap: _pickDueDate,
+                          borderRadius: BorderRadius.circular(16),
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'Due date',
+                              prefixIcon: const Icon(
+                                Icons.calendar_today_outlined,
                               ),
+                              suffixIcon: _dueDate == null
+                                  ? const Icon(Icons.chevron_right)
+                                  : IconButton(
+                                      tooltip: 'Clear due date',
+                                      icon: const Icon(Icons.clear),
+                                      onPressed: () =>
+                                          setState(() => _dueDate = null),
+                                    ),
                             ),
-                            IconButton(
-                              onPressed: _pickDueDate,
-                              icon: const Icon(Icons.calendar_today),
+                            child: Text(
+                              _dueDate == null
+                                  ? 'No due date'
+                                  : formatTaskDate(_dueDate!, DateTime.now()),
+                              style: Theme.of(context).textTheme.bodyLarge,
                             ),
-                            if (_dueDate != null)
-                              IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () =>
-                                    setState(() => _dueDate = null),
-                              ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<String>(
+                          initialValue: _repeat ?? 'never',
+                          decoration: const InputDecoration(
+                            labelText: 'Repeat',
+                            prefixIcon: Icon(Icons.repeat),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'never',
+                              child: Text('Never'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'daily',
+                              child: Text('Daily'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'weekly',
+                              child: Text('Weekly'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'monthly',
+                              child: Text('Monthly'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'yearly',
+                              child: Text('Yearly'),
+                            ),
                           ],
+                          onChanged: (value) => setState(() {
+                            _repeatEdited = true;
+                            _repeat = value == 'never' ? null : value;
+                          }),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        initialValue: _repeat ?? 'never',
-                        decoration: const InputDecoration(labelText: 'Repeat'),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'never',
-                            child: Text('Never'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'daily',
-                            child: Text('Daily'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'weekly',
-                            child: Text('Weekly'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'monthly',
-                            child: Text('Monthly'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'yearly',
-                            child: Text('Yearly'),
-                          ),
-                        ],
-                        onChanged: (value) => setState(() {
-                          _repeatEdited = true;
-                          _repeat = value == 'never' ? null : value;
-                        }),
-                      ),
-                      const Spacer(),
-                      ElevatedButton(
-                        onPressed: _saving ? null : _save,
-                        child: _saving
-                            ? const CircularProgressIndicator()
-                            : const Text('Save'),
-                      ),
-                    ],
+                        const SizedBox(height: 24),
+                        const Spacer(),
+                        FilledButton(
+                          onPressed: _saving ? null : _save,
+                          child: _saving
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(
+                                  _isEditing ? 'Save changes' : 'Create task',
+                                ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

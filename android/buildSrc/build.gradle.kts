@@ -6,3 +6,6 @@ repositories {
     google()
     mavenCentral()
 }
+dependencies {
+    implementation(localGroovy())
+}

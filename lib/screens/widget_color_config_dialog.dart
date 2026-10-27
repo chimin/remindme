@@ -1,34 +1,35 @@
 import 'package:flutter/material.dart';
-
 import '../models/widget_color_config.dart';
 import '../widgets/color_picker.dart';
 
-/// Dialog that lets the user configure the home-screen widget colors.
-///
-/// Three colors can be configured: the task text color, the widget background
-/// color and the color of the "Overdue" group title. The background
-/// transparency is controlled by a separate slider.
+/// Edits widget colors with a live preview before saving.
 class WidgetColorConfigDialog extends StatefulWidget {
   const WidgetColorConfigDialog({
     super.key,
     required this.initial,
     required this.onSaved,
   });
-
   final WidgetColorConfig initial;
   final ValueChanged<WidgetColorConfig> onSaved;
-
   @override
-  State<WidgetColorConfigDialog> createState() => _WidgetColorConfigDialogState();
+  State<WidgetColorConfigDialog> createState() =>
+      _WidgetColorConfigDialogState();
 }
 
 class _WidgetColorConfigDialogState extends State<WidgetColorConfigDialog> {
-  late WidgetColorConfig _config;
-
-  @override
-  void initState() {
-    super.initState();
-    _config = widget.initial;
+  late WidgetColorConfig _config = widget.initial;
+  static const _dark = WidgetColorConfig(
+    textColor: 0xFFF5F0FA,
+    backgroundColor: 0xFF272131,
+    backgroundAlpha: 242,
+    overdueColor: 0xFFFFB4AB,
+  );
+  String get _preset {
+    if (_config.toJsonString() == const WidgetColorConfig().toJsonString()) {
+      return 'Light';
+    }
+    if (_config.toJsonString() == _dark.toJsonString()) return 'Dark';
+    return 'Custom';
   }
 
   Future<void> _pickColor({
@@ -40,82 +41,188 @@ class _WidgetColorConfigDialogState extends State<WidgetColorConfigDialog> {
       context: context,
       builder: (context) => _ColorPickerDialog(title: title, color: current),
     );
-    if (picked == null) return;
-    onPicked(picked);
+    if (picked != null && mounted) onPicked(picked);
+  }
+
+  Widget _preview() {
+    final text = Color(_config.textColor);
+    return Semantics(
+      label: 'Live widget appearance preview',
+      child: Container(
+        key: const ValueKey('widget_preview'),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFE5DCF0), Color(0xFF8D78A8)],
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Color(
+              _config.backgroundColor,
+            ).withValues(alpha: _config.backgroundAlpha / 255),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: DefaultTextStyle(
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium!.copyWith(color: text),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'My Tasks',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Overdue',
+                  style: TextStyle(
+                    color: Color(_config.overdueColor),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.check_box_outline_blank, size: 20, color: text),
+                    const SizedBox(width: 8),
+                    const Expanded(child: Text('Renew library books')),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Today',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.check_box_outline_blank, size: 20, color: text),
+                    const SizedBox(width: 8),
+                    const Expanded(child: Text('Water plants')),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Widget colors'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      title: const Text('Widget appearance'),
+      content: SizedBox(
+        width: 360,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _preview(),
+              const SizedBox(height: 20),
+              const Text('Theme'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final preset in ['Light', 'Dark'])
+                    ChoiceChip(
+                      label: Text(preset),
+                      selected: _preset == preset,
+                      onSelected: (_) => setState(
+                        () => _config = preset == 'Light'
+                            ? const WidgetColorConfig()
+                            : _dark,
+                      ),
+                    ),
+                  if (_preset == 'Custom') const Chip(label: Text('Custom')),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _ColorRow(
+                label: 'Text color',
+                color: _config.textColor,
+                onPick: () => _pickColor(
+                  title: 'Text color',
+                  current: _config.textColor,
+                  onPicked: (c) =>
+                      setState(() => _config = _config.copyWith(textColor: c)),
+                ),
+              ),
+              _ColorRow(
+                label: 'Overdue title color',
+                color: _config.overdueColor,
+                onPick: () => _pickColor(
+                  title: 'Overdue title color',
+                  current: _config.overdueColor,
+                  onPicked: (c) => setState(
+                    () => _config = _config.copyWith(overdueColor: c),
+                  ),
+                ),
+              ),
+              _ColorRow(
+                label: 'Background color',
+                color: _config.backgroundColor,
+                onPick: () => _pickColor(
+                  title: 'Background color',
+                  current: _config.backgroundColor,
+                  onPicked: (c) => setState(
+                    () => _config = _config.copyWith(backgroundColor: c),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Background opacity: ${(_config.backgroundAlpha / 255 * 100).round()}%',
+              ),
+              Slider(
+                value: _config.backgroundAlpha.toDouble(),
+                min: 0,
+                max: 255,
+                label: '${(_config.backgroundAlpha / 255 * 100).round()}%',
+                onChanged: (v) => setState(
+                  () => _config = _config.copyWith(backgroundAlpha: v.round()),
+                ),
+              ),
+              Text(
+                'Higher opacity makes tasks easier to read.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              TextButton(
+                onPressed: () =>
+                    setState(() => _config = const WidgetColorConfig()),
+                child: const Text('Reset'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      actions: [
+        Row(
           children: [
-            _ColorRow(
-              label: 'Text color',
-              color: _config.textColor,
-              onPick: () => _pickColor(
-                title: 'Text color',
-                current: _config.textColor,
-                onPicked: (c) => setState(
-                  () => _config = _config.copyWith(textColor: c),
-                ),
-              ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
             ),
-            const SizedBox(height: 12),
-            _ColorRow(
-              label: 'Overdue title color',
-              color: _config.overdueColor,
-              onPick: () => _pickColor(
-                title: 'Overdue title color',
-                current: _config.overdueColor,
-                onPicked: (c) => setState(
-                  () => _config = _config.copyWith(overdueColor: c),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            _ColorRow(
-              label: 'Background color',
-              color: _config.backgroundColor,
-              alpha: _config.backgroundAlpha,
-              onPick: () => _pickColor(
-                title: 'Background color',
-                current: _config.backgroundColor,
-                onPicked: (c) => setState(
-                  () => _config = _config.copyWith(backgroundColor: c),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Transparency: '
-              '${((1 - _config.backgroundAlpha / 255) * 100).round()}%',
-            ),
-            Slider(
-              value: _config.backgroundAlpha.toDouble(),
-              min: 0,
-              max: 255,
-              onChanged: (v) => setState(
-                () => _config = _config.copyWith(backgroundAlpha: v.round()),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FilledButton(
+                onPressed: () {
+                  widget.onSaved(_config);
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Save appearance'),
               ),
             ),
           ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            widget.onSaved(_config);
-            Navigator.of(context).pop();
-          },
-          child: const Text('Save'),
         ),
       ],
     );
@@ -127,39 +234,35 @@ class _ColorRow extends StatelessWidget {
     required this.label,
     required this.color,
     required this.onPick,
-    this.alpha,
   });
-
   final String label;
   final int color;
-  final int? alpha;
   final VoidCallback onPick;
-
   @override
-  Widget build(BuildContext context) {
-    final value = Color(color);
-    final preview = alpha == null
-        ? value
-        : value.withValues(alpha: alpha! / 255);
-    return Row(
-      children: [
-        Expanded(child: Text(label)),
-        GestureDetector(
-          key: ValueKey('color_box_$label'),
-          onTap: onPick,
-          child: Container(
-            width: 32,
-            height: 32,
+  Widget build(BuildContext context) => InkWell(
+    key: ValueKey('color_box_$label'),
+    onTap: onPick,
+    borderRadius: BorderRadius.circular(12),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          Container(
+            width: 28,
+            height: 28,
             decoration: BoxDecoration(
-              color: preview,
-              border: Border.all(color: Colors.grey),
-              borderRadius: BorderRadius.circular(4),
+              color: Color(color),
+              shape: BoxShape.circle,
+              border: Border.all(color: Theme.of(context).colorScheme.outline),
             ),
           ),
-        ),
-      ],
-    );
-  }
+          const SizedBox(width: 8),
+          const Icon(Icons.chevron_right, size: 20),
+        ],
+      ),
+    ),
+  );
 }
 
 /// Dialog wrapping [ColorPicker] that returns the picked color.

@@ -61,15 +61,14 @@ List<TaskGroup> groupTasksByDueDate(
     );
   }
   if (todayTasks.isNotEmpty) {
-    groups.add(
-      TaskGroup(title: 'Today', category: 'today', tasks: todayTasks),
-    );
+    groups.add(TaskGroup(title: 'Today', category: 'today', tasks: todayTasks));
   }
   final futureKeys = futureTasks.keys.toList()..sort();
   for (final key in futureKeys) {
     groups.add(
       TaskGroup(
-        title: '${key.year}-${key.month.toString().padLeft(2, '0')}'
+        title:
+            '${key.year}-${key.month.toString().padLeft(2, '0')}'
             '-${key.day.toString().padLeft(2, '0')}',
         category: 'future',
         tasks: futureTasks[key]!,
@@ -96,10 +95,7 @@ List<Map<String, dynamic>> buildWidgetDisplayItems(
   final items = <Map<String, dynamic>>[];
   final name = taskListName?.trim();
   if (name != null && name.isNotEmpty) {
-    items.add({
-      'type': 'tasklist',
-      'title': name,
-    });
+    items.add({'type': 'tasklist', 'title': name});
   }
   for (final group in groups) {
     items.add({
@@ -118,4 +114,32 @@ List<Map<String, dynamic>> buildWidgetDisplayItems(
     }
   }
   return items;
+}
+
+/// Formats the calendar date stored by Google Tasks without shifting timezones.
+String formatTaskDate(DateTime date, DateTime now) {
+  final day = DateTime.utc(date.year, date.month, date.day);
+  final today = DateTime.utc(now.year, now.month, now.day);
+  final difference = day.difference(today).inDays;
+  if (difference == 0) return 'Today';
+  if (difference == 1) return 'Tomorrow';
+  if (difference == -1) return 'Yesterday';
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  final label =
+      '${weekdays[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}';
+  return date.year == now.year ? label : '$label, ${date.year}';
 }

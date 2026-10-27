@@ -45,7 +45,11 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider<TasksRepository>.value(
           value: repo,
-          child: const MaterialApp(home: TaskHomeScreen()),
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
+            home: const TaskHomeScreen(),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -53,10 +57,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Delete completed tasks'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete'));
+      await tester.tap(find.text('Delete 2 tasks'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('0/2'), findsOneWidget);
+      expect(find.text('0 of 2 deleted'), findsOneWidget);
       expect(find.byType(AlertDialog), findsOneWidget);
       expect(find.text('First'), findsOneWidget);
       expect(find.text('Second'), findsOneWidget);
@@ -66,7 +70,7 @@ void main() {
       expect(find.byType(AlertDialog), findsOneWidget);
       repo.deletions[0].complete();
       await tester.pump();
-      expect(find.text('1/2'), findsOneWidget);
+      expect(find.text('1 of 2 deleted'), findsOneWidget);
       final screenshot = await captureAndCompare(
         tester,
         find.byType(MaterialApp),
@@ -129,7 +133,11 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider<TasksRepository>.value(
           value: repo,
-          child: MaterialApp(home: const TaskHomeScreen()),
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
+            home: const TaskHomeScreen(),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -138,7 +146,7 @@ void main() {
       expect(find.byIcon(Icons.repeat), findsNWidgets(2));
       await tester.tap(find.text('Pending repeat'));
       await tester.pumpAndSettle();
-      expect(find.text('Edit Task'), findsNothing);
+      expect(find.text('Edit task'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
@@ -214,11 +222,8 @@ void main() {
           child: RepaintBoundary(
             key: boundaryKey,
             child: MaterialApp(
-              theme: ThemeData(
-                colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-                useMaterial3: true,
-                fontFamily: 'Roboto',
-              ),
+              debugShowCheckedModeBanner: false,
+              theme: createAppTheme(),
               home: const AuthRouter(),
             ),
           ),
@@ -234,8 +239,6 @@ void main() {
       expect(find.text('No due date'), findsOneWidget);
       expect(find.text('Task without due date'), findsOneWidget);
       expect(find.text('Today task 1'), findsOneWidget);
-      expect(find.text('Today task 2'), findsOneWidget);
-      expect(find.text('Future task 1'), findsOneWidget);
 
       // The last task falls below the fold of the 640px tall viewport, so the
       // list has to be scrolled before it is built and can be asserted.
@@ -244,7 +247,10 @@ void main() {
       );
       scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
       await tester.pumpAndSettle();
+      expect(find.text('Future task 1'), findsOneWidget);
       expect(find.text('Future task 2'), findsOneWidget);
+      expect(find.text('Completed'), findsOneWidget);
+      expect(find.text('Today task 2'), findsOneWidget);
 
       // Scroll back to the top so the golden shows the whole list header.
       scrollable.position.jumpTo(0);
@@ -307,11 +313,8 @@ void main() {
         ChangeNotifierProvider<TasksRepository>.value(
           value: mock,
           child: MaterialApp(
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-              useMaterial3: true,
-              fontFamily: 'Roboto',
-            ),
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
             home: const AuthRouter(),
           ),
         ),
@@ -368,11 +371,8 @@ void main() {
           child: RepaintBoundary(
             key: boundaryKey,
             child: MaterialApp(
-              theme: ThemeData(
-                colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-                useMaterial3: true,
-                fontFamily: 'Roboto',
-              ),
+              debugShowCheckedModeBanner: false,
+              theme: createAppTheme(),
               home: const AuthRouter(),
             ),
           ),
@@ -445,11 +445,8 @@ void main() {
           child: RepaintBoundary(
             key: boundaryKey,
             child: MaterialApp(
-              theme: ThemeData(
-                colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-                useMaterial3: true,
-                fontFamily: 'Roboto',
-              ),
+              debugShowCheckedModeBanner: false,
+              theme: createAppTheme(),
               home: const AuthRouter(),
             ),
           ),
@@ -519,11 +516,8 @@ void main() {
         ChangeNotifierProvider<TasksRepository>.value(
           value: mock,
           child: MaterialApp(
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-              useMaterial3: true,
-              fontFamily: 'Roboto',
-            ),
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
             home: const AuthRouter(),
           ),
         ),
@@ -574,11 +568,8 @@ void main() {
         ChangeNotifierProvider<TasksRepository>.value(
           value: mock,
           child: MaterialApp(
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-              useMaterial3: true,
-              fontFamily: 'Roboto',
-            ),
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
             home: const AuthRouter(),
           ),
         ),
@@ -618,11 +609,8 @@ void main() {
         ChangeNotifierProvider<TasksRepository>.value(
           value: mock,
           child: MaterialApp(
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-              useMaterial3: true,
-              fontFamily: 'Roboto',
-            ),
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
             home: const AuthRouter(),
           ),
         ),
@@ -684,11 +672,8 @@ void main() {
           child: RepaintBoundary(
             key: boundaryKey,
             child: MaterialApp(
-              theme: ThemeData(
-                colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-                useMaterial3: true,
-                fontFamily: 'Roboto',
-              ),
+              debugShowCheckedModeBanner: false,
+              theme: createAppTheme(),
               home: const AuthRouter(),
             ),
           ),
@@ -702,7 +687,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Show completed tasks'), findsOneWidget);
-      expect(find.text('Widget colors'), findsOneWidget);
+      expect(find.text('Widget appearance'), findsOneWidget);
       expect(find.text('Delete completed tasks'), findsOneWidget);
       expect(find.text('Sign out'), findsOneWidget);
       expect(
@@ -729,6 +714,199 @@ void main() {
         isTrue,
         reason: 'home screen menu golden diff exceeded threshold',
       );
+    },
+  );
+
+  testWidgets(
+    'listing should show all tasks and an icon action when the home screen opens',
+    (tester) async {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('home_widget'),
+        (_) async => null,
+      );
+      final now = DateTime.now();
+      final repo = MockTasksRepository()
+        ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
+        ..mockTasks.addAll([
+          Task(
+            id: 'past',
+            title: 'Past task',
+            due: now.subtract(const Duration(days: 1)).toIso8601String(),
+          ),
+          Task(id: 'today', title: 'Current task', due: now.toIso8601String()),
+          Task(
+            id: 'future',
+            title: 'Later task',
+            due: now.add(const Duration(days: 1)).toIso8601String(),
+          ),
+          Task(id: 'undated', title: 'Undated task'),
+        ])
+        ..signInMock(tasklistId: 'list-1');
+      await tester.pumpWidget(
+        ChangeNotifierProvider<TasksRepository>.value(
+          value: repo,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
+            home: const TaskHomeScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final title in [
+        'Past task',
+        'Current task',
+        'Later task',
+        'Undated task',
+      ]) {
+        expect(find.text(title), findsOneWidget);
+      }
+      expect(find.byType(ChoiceChip), findsNothing);
+      expect(find.textContaining(RegExp(r'^\d+ tasks? today$')), findsNothing);
+      expect(find.text('Add task'), findsNothing);
+      final add = find.byTooltip('Add task');
+      expect(add, findsOneWidget);
+      expect(
+        tester
+            .widget<FloatingActionButton>(find.byType(FloatingActionButton))
+            .isExtended,
+        isFalse,
+      );
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      expect(find.text('New task'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'category bars should limit collapse and counts when all categories are present',
+    (tester) async {
+      tester.view.physicalSize = const Size(720, 2400);
+      addTearDown(tester.view.resetPhysicalSize);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('home_widget'),
+        (_) async => null,
+      );
+      final now = DateTime.now();
+      final repo = MockTasksRepository()
+        ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
+        ..mockTasks.addAll([
+          Task(
+            id: 'past',
+            title: 'Past task',
+            due: now.subtract(const Duration(days: 1)).toIso8601String(),
+          ),
+          Task(id: 'undated', title: 'Undated task'),
+          Task(id: 'today', title: 'Current task', due: now.toIso8601String()),
+          Task(
+            id: 'future',
+            title: 'Later task',
+            due: now.add(const Duration(days: 1)).toIso8601String(),
+          ),
+          Task(id: 'done', title: 'Finished task', status: 'completed'),
+        ])
+        ..signInMock(tasklistId: 'list-1');
+      await tester.pumpWidget(
+        ChangeNotifierProvider<TasksRepository>.value(
+          value: repo,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
+            home: const TaskHomeScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final category in ['overdue', 'noDueDate', 'today']) {
+        expect(
+          find.byKey(ValueKey('category_count_$category')),
+          findsOneWidget,
+        );
+      }
+      for (final category in ['future', 'completed']) {
+        expect(find.byKey(ValueKey('category_count_$category')), findsNothing);
+      }
+      expect(find.byIcon(Icons.expand_less), findsNWidgets(2));
+      for (final entry in {
+        'overdue_Overdue': 'Past task',
+        'noDueDate_No due date': 'Undated task',
+      }.entries) {
+        final heading = find.byKey(ValueKey('category_${entry.key}'));
+        await tester.tap(heading);
+        await tester.pumpAndSettle();
+        expect(find.text(entry.value), findsNothing);
+        await tester.tap(heading);
+        await tester.pumpAndSettle();
+        expect(find.text(entry.value), findsOneWidget);
+      }
+      for (final entry in {
+        'today_Today': 'Current task',
+        'completed_Completed': 'Finished task',
+      }.entries) {
+        final heading = find.byKey(ValueKey('category_${entry.key}'));
+        expect(
+          find.descendant(of: heading, matching: find.byType(InkWell)),
+          findsNothing,
+        );
+        await tester.tap(heading);
+        await tester.pumpAndSettle();
+        expect(find.text(entry.value), findsOneWidget);
+      }
+      final futureHeading = find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>).value.startsWith(
+              'category_future_',
+            ),
+      );
+      expect(
+        find.descendant(of: futureHeading, matching: find.byType(InkWell)),
+        findsNothing,
+      );
+      await tester.tap(futureHeading);
+      await tester.pumpAndSettle();
+      expect(find.text('Later task'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'delete confirmation should show the task count when completed tasks exist',
+    (tester) async {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('home_widget'),
+        (_) async => null,
+      );
+      final repo = MockTasksRepository()
+        ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
+        ..mockTasks.addAll([
+          Task(id: 'done', title: 'Finished task', status: 'completed'),
+          Task(id: 'open', title: 'Open task'),
+        ])
+        ..signInMock(tasklistId: 'list-1');
+      await tester.pumpWidget(
+        ChangeNotifierProvider<TasksRepository>.value(
+          value: repo,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
+            home: const TaskHomeScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete completed tasks'));
+      await tester.pumpAndSettle();
+      expect(find.text('Clear 1 completed task?'), findsOneWidget);
+      expect(find.text('Delete 1 task'), findsOneWidget);
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile('golden/delete_completed_tasks_dialog.png'),
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(repo.mockTasks, hasLength(2));
     },
   );
 }

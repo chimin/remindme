@@ -86,7 +86,8 @@ const String kTaskHomeGoldenPath = 'test/screens/golden/task_home_screen.png';
 const String kTaskHomeListSwitcherGoldenPath =
     'test/screens/golden/task_home_screen_list_switcher.png';
 const String kTaskEditGoldenPath = 'test/screens/golden/task_edit_screen.png';
-const String kSignOutDialogGoldenPath = 'test/screens/golden/sign_out_dialog.png';
+const String kSignOutDialogGoldenPath =
+    'test/screens/golden/sign_out_dialog.png';
 const String kWidgetColorConfigGoldenPath =
     'test/screens/golden/widget_color_config_dialog.png';
 const String kWidgetColorPickerDialogGoldenPath =
@@ -132,12 +133,9 @@ Future<Map<String, dynamic>> captureAndCompare(
       throw StateError('failed to encode screenshot for $name');
     }
     final goldenFile = File(goldenPath);
-    final result = <String, dynamic>{
-      'name': name,
-      'goldenMissing': false,
-    };
-    if (!await goldenFile.exists()) {
-      debugPrint('Golden missing; created $goldenPath');
+    final result = <String, dynamic>{'name': name, 'goldenMissing': false};
+    if (autoUpdateGoldenFiles || !await goldenFile.exists()) {
+      debugPrint('Saved golden: $goldenPath');
       await goldenFile.parent.create(recursive: true);
       await goldenFile.writeAsBytes(pngBytes.buffer.asUint8List());
       result['diffPct'] = 0.0;
@@ -149,8 +147,9 @@ Future<Map<String, dynamic>> captureAndCompare(
     image.dispose();
     final goldenImage = await decodePng(await goldenFile.readAsBytes());
     try {
-      final goldenRaw =
-          await goldenImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final goldenRaw = await goldenImage.toByteData(
+        format: ui.ImageByteFormat.rawRgba,
+      );
       if (goldenRaw == null) {
         throw StateError('failed to decode golden $goldenPath');
       }
@@ -189,7 +188,9 @@ Future<void> writeReport({
   lines.add('# Golden Screenshot Comparison Report');
   lines.add('');
   lines.add('- Threshold: $threshold%');
-  lines.add('- Overall pass: ${screenshots.values.every((element) => element['pass'] as bool)}');
+  lines.add(
+    '- Overall pass: ${screenshots.values.every((element) => element['pass'] as bool)}',
+  );
   lines.add('- Timestamp: ${DateTime.now().toUtc().toIso8601String()}');
   lines.add('');
   lines.add('## Screenshots');
@@ -200,16 +201,22 @@ Future<void> writeReport({
     final s = entry.value as Map<String, dynamic>;
     final name = s['name'] as String;
     final missing = s['goldenMissing'] as bool;
-    final diff = missing ? 'Missing' : '${(s['diffPct'] as num).toStringAsFixed(2)}%';
+    final diff = missing
+        ? 'Missing'
+        : '${(s['diffPct'] as num).toStringAsFixed(2)}%';
     lines.add('| $name | $diff | ${s['pass']} |');
   }
   lines.add('');
-  final failing = screenshots.values.where((element) => !(element['pass'] as bool)).length;
+  final failing = screenshots.values
+      .where((element) => !(element['pass'] as bool))
+      .length;
   lines.add('## Result');
   lines.add('');
-  lines.add(failing == 0
-      ? 'All screenshots are within the $threshold% difference threshold.'
-      : '$failing screenshot(s) exceed the $threshold% difference threshold.');
+  lines.add(
+    failing == 0
+        ? 'All screenshots are within the $threshold% difference threshold.'
+        : '$failing screenshot(s) exceed the $threshold% difference threshold.',
+  );
   lines.add('');
 
   final reportFile = File(kReportPath);

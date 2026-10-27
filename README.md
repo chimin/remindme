@@ -101,6 +101,31 @@ flutter run -d <device> --dart-define-from-file=secrets/build.json
 - Analyze code: `flutter analyze`
 - Run tests: `flutter test --dart-define=GOOGLE_WEB_CLIENT_ID=test123`
 
+## Branding assets
+
+Run from PowerShell in the project root:
+
+```powershell
+.\android\gradlew.bat -p android updateBranding
+```
+
+This replaces the Android launcher icons, iOS app icons, and Play Store images
+with opaque PNGs at their required sizes. It uses the existing 1024px iOS icon
+as the icon source and `assets/branding/play-store-feature-graphic.png` as the banner
+source. iOS sizes come from its `Contents.json` catalog. Normal builds use the
+checked-in images and do not regenerate them.
+
+To preview the exports without changing production assets:
+
+```powershell
+.\android\gradlew.bat -p android updateBranding '-PbrandingOutputDir=../build/branding-preview'
+```
+
+Use `-PbrandingIconSource=...` and `-PbrandingFeatureSource=...` to supply new
+artwork. All three path options are resolved relative to the `android` directory;
+absolute paths also work. The task uses JVM image processing and needs no
+PowerShell-specific image libraries.
+
 ## Android screenshots
 
 Run from PowerShell:

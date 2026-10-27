@@ -30,9 +30,7 @@ void main() {
 
   test('tasks with unparseable due dates land in the No due date group', () {
     final now = DateTime(2026, 1, 15, 10);
-    final tasks = [
-      Task(id: 'a', title: 'Broken due date', due: 'not-a-date'),
-    ];
+    final tasks = [Task(id: 'a', title: 'Broken due date', due: 'not-a-date')];
     final items = buildWidgetDisplayItems(tasks, now);
 
     expect(items, hasLength(2));
@@ -65,11 +63,18 @@ void main() {
     // header + 1 task, Today header + 2 tasks, two future headers + 1 task
     // each (future groups by exact date)
     expect(items.map((e) => e['type']).toList(), [
-      'header', 'task', 'task',
-      'header', 'task',
-      'header', 'task', 'task',
-      'header', 'task',
-      'header', 'task',
+      'header',
+      'task',
+      'task',
+      'header',
+      'task',
+      'header',
+      'task',
+      'task',
+      'header',
+      'task',
+      'header',
+      'task',
     ]);
 
     expect(items[0]['title'], 'Overdue');
@@ -114,11 +119,7 @@ void main() {
     final now = DateTime(2026, 1, 15, 10);
     final tasks = [Task(id: 'a', title: 'Task')];
 
-    final items = buildWidgetDisplayItems(
-      tasks,
-      now,
-      taskListName: 'Work',
-    );
+    final items = buildWidgetDisplayItems(tasks, now, taskListName: 'Work');
 
     expect(items.first['type'], 'tasklist');
     expect(items.first['title'], 'Work');
@@ -171,23 +172,25 @@ void main() {
     expect(items[1]['title'], 'Open task');
   });
 
-  test('buildWidgetDisplayItems should drop groups with only completed tasks',
-      () {
-    final now = DateTime(2026, 1, 15, 10);
-    final tasks = [
-      Task(id: 'a', title: 'Open today', due: '2026-01-15'),
-      Task(
-        id: 'b',
-        title: 'Done tomorrow',
-        status: 'completed',
-        due: '2026-01-16',
-      ),
-    ];
+  test(
+    'buildWidgetDisplayItems should drop groups with only completed tasks',
+    () {
+      final now = DateTime(2026, 1, 15, 10);
+      final tasks = [
+        Task(id: 'a', title: 'Open today', due: '2026-01-15'),
+        Task(
+          id: 'b',
+          title: 'Done tomorrow',
+          status: 'completed',
+          due: '2026-01-16',
+        ),
+      ];
 
-    final items = buildWidgetDisplayItems(tasks, now);
+      final items = buildWidgetDisplayItems(tasks, now);
 
-    expect(items.map((e) => e['title']).toList(), ['Today', 'Open today']);
-  });
+      expect(items.map((e) => e['title']).toList(), ['Today', 'Open today']);
+    },
+  );
 
   test('groupTasksByDueDate should include completed tasks by default', () {
     final now = DateTime(2026, 1, 15, 10);
@@ -235,4 +238,29 @@ void main() {
     expect(groups, hasLength(1));
     expect(groups.first.title, 'Today');
   });
+
+  test(
+    'formatTaskDate should use relative labels when dates cross a year boundary',
+    () {
+      final now = DateTime(2026, 12, 31, 23, 59);
+      expect(formatTaskDate(DateTime.utc(2026, 12, 30), now), 'Yesterday');
+      expect(formatTaskDate(DateTime.utc(2026, 12, 31), now), 'Today');
+      expect(formatTaskDate(DateTime.utc(2027, 1, 1), now), 'Tomorrow');
+      expect(formatTaskDate(DateTime.utc(2027, 1, 2), now), 'Sat, Jan 2, 2027');
+    },
+  );
+
+  test(
+    'formatTaskDate should preserve calendar days when a due date uses UTC',
+    () {
+      expect(
+        formatTaskDate(DateTime.utc(2026, 10, 27), DateTime(2026, 10, 26, 23)),
+        'Tomorrow',
+      );
+      expect(
+        formatTaskDate(DateTime(2026, 11, 2), DateTime(2026, 10, 26)),
+        'Mon, Nov 2',
+      );
+    },
+  );
 }

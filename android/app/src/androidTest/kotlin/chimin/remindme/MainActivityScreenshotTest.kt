@@ -2,13 +2,13 @@ package chimin.remindme
 
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
-import android.content.Intent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import java.io.File
+import java.util.regex.Pattern
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -21,17 +21,28 @@ class MainActivityScreenshotTest {
     private val device = UiDevice.getInstance(instrumentation)
     private val timeout = 20_000L
 
+    // Task rows merge title and date into a multiline accessibility label.
+    private fun taskSelector(title: String) =
+        By.desc(Pattern.compile("(?s).*" + Pattern.quote(title) + ".*"))
+
     private fun launchFixture() {
-        device.pressHome()
-        context.startActivity(Intent(context, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        })
-        // Flutter exposes its semantics through content descriptions.
+        device.wakeUp()
+        device.executeShellCommand("wm dismiss-keyguard")
+        device.executeShellCommand("am start -W -n " + context.packageName + "/.MainActivity")
         for (title in listOf("Renew library books", "Pick up groceries",
                 "Plan weekend trip", "Book dentist appointment")) {
-            assertTrue("Missing fixture task: $title",
-                device.wait(Until.hasObject(By.descContains(title)), timeout))
+            var attempts = 0
+            while (!device.wait(Until.hasObject(taskSelector(title)), 3000) && attempts++ < 4) {
+                device.swipe(device.displayWidth / 2, device.displayHeight * 4 / 5,
+                    device.displayWidth / 2, device.displayHeight / 3, 30)
+            }
+            assertTrue("Missing fixture task: $title", device.hasObject(taskSelector(title)))
         }
+        repeat(3) {
+            device.swipe(device.displayWidth / 2, device.displayHeight / 3,
+                device.displayWidth / 2, device.displayHeight * 4 / 5, 30)
+        }
+        device.waitForIdle()
     }
 
     private fun capture(name: String) {
@@ -50,15 +61,14 @@ class MainActivityScreenshotTest {
     @Test
     fun captureShouldShowAddTaskWhenAddButtonIsTapped() {
         launchFixture()
-        // Flutter's unlabeled FAB contains the add icon semantics only when
-        // given a tooltip; use its accessibility label.
+        // Use the extended FAB's accessible action label.
         val add = device.wait(Until.findObject(By.desc("Add task")), timeout)
         checkNotNull(add) { "Add task button was not accessible" }
         add.click()
         assertTrue("Add task screen did not open",
-            device.wait(Until.hasObject(By.descContains("New Task")), timeout))
+            device.wait(Until.hasObject(By.descContains("New task")), timeout))
         device.pressBack() // Dismiss the autofocus keyboard for the store screenshot.
-        assertTrue(device.wait(Until.hasObject(By.descContains("New Task")), timeout))
+        assertTrue(device.wait(Until.hasObject(By.descContains("New task")), timeout))
         capture("add_task.png")
     }
 

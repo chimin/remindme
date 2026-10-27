@@ -2,10 +2,10 @@ import 'dart:convert';
 
 class WidgetColorConfig {
   const WidgetColorConfig({
-    this.textColor = 0xFF000000,
-    this.backgroundColor = 0xFFFFFFFF,
-    this.backgroundAlpha = 0x80,
-    this.overdueColor = 0xFFF44336,
+    this.textColor = 0xFF211B2B,
+    this.backgroundColor = 0xFFFAF8FC,
+    this.backgroundAlpha = 0xF2,
+    this.overdueColor = 0xFFB73545,
   });
 
   final int textColor;
@@ -30,18 +30,18 @@ class WidgetColorConfig {
   }
 
   Map<String, dynamic> toJson() => {
-        'textColor': textColor,
-        'backgroundColor': backgroundColor,
-        'backgroundAlpha': backgroundAlpha,
-        'overdueColor': overdueColor,
-      };
+    'textColor': textColor,
+    'backgroundColor': backgroundColor,
+    'backgroundAlpha': backgroundAlpha,
+    'overdueColor': overdueColor,
+  };
 
   factory WidgetColorConfig.fromJson(Map<String, dynamic> json) {
     return WidgetColorConfig(
-      textColor: (json['textColor'] as num?)?.toInt() ?? 0xFF000000,
-      backgroundColor: (json['backgroundColor'] as num?)?.toInt() ?? 0xFFFFFFFF,
-      backgroundAlpha: (json['backgroundAlpha'] as num?)?.toInt() ?? 0x80,
-      overdueColor: (json['overdueColor'] as num?)?.toInt() ?? 0xFFF44336,
+      textColor: (json['textColor'] as num?)?.toInt() ?? 0xFF211B2B,
+      backgroundColor: (json['backgroundColor'] as num?)?.toInt() ?? 0xFFFAF8FC,
+      backgroundAlpha: (json['backgroundAlpha'] as num?)?.toInt() ?? 0xF2,
+      overdueColor: (json['overdueColor'] as num?)?.toInt() ?? 0xFFB73545,
     );
   }
 

@@ -2,5 +2,5 @@
 <resources>
     <string name="task_widget_label">RemindMe tasks</string>
     <string name="task_widget_description">Shows your RemindMe tasks for the selected task list, grouped by due date</string>
-    <string name="task_widget_empty">No tasks yet</string>
+    <string name="task_widget_empty">All caught up!\nTap to open your tasks.</string>
 </resources>

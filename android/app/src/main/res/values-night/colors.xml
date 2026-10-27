@@ -1,9 +1,9 @@
 <resources>
-    <color name="widget_task_checkbox">#000000</color>
-    <color name="widget_task_completed">#000000</color>
-    <color name="widget_task_title">#000000</color>
-    <color name="widget_group_header">#000000</color>
-    <color name="widget_overdue">#F44336</color>
-    <color name="widget_task_list_title">#000000</color>
-    <color name="widget_empty_text">#000000</color>
+    <color name="widget_task_checkbox">#211B2B</color>
+    <color name="widget_task_completed">#211B2B</color>
+    <color name="widget_task_title">#211B2B</color>
+    <color name="widget_group_header">#211B2B</color>
+    <color name="widget_overdue">#B73545</color>
+    <color name="widget_task_list_title">#211B2B</color>
+    <color name="widget_empty_text">#211B2B</color>
 </resources>
