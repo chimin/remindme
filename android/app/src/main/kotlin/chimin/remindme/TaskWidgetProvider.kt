@@ -199,6 +199,37 @@ class TaskWidgetProvider : AppWidgetProvider() {
     }
   }
 
+  internal fun buildViews(context: Context, widgetId: Int): RemoteViews {
+    val prefs = HomeWidgetPlugin.getData(context)
+    val items = loadItems(prefs)
+    val colorConfig = loadColorConfig(prefs)
+    val pending = openAppIntent(context)
+    return buildBaseViews(context, pending, colorConfig).apply {
+      setTextViewText(R.id.task_list_title, items.firstOrNull { it.type == "tasklist" }?.title ?: "")
+      setInt(R.id.task_list_title, "setTextColor", colorConfig.textColor)
+      setOnClickPendingIntent(R.id.task_list_title, pending)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        // Send row colors and the surrounding appearance in one snapshot so
+        // the launcher does not need a separate service refresh for the rows.
+        val collection = RemoteViews.RemoteCollectionItems.Builder()
+          .setHasStableIds(false)
+          .setViewTypeCount(2)
+        items.filter { it.type != "tasklist" }.forEachIndexed { index, item ->
+          collection.addItem(index.toLong(), buildItemViews(context, item, null, colorConfig))
+        }
+        setRemoteAdapter(R.id.task_list, collection.build())
+      } else {
+        val listIntent = Intent(context, TaskWidgetService::class.java).apply {
+          putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+          data = Uri.parse("remindme://widget/$widgetId")
+        }
+        setRemoteAdapter(R.id.task_list, listIntent)
+      }
+      setEmptyView(R.id.task_list, R.id.empty_view)
+      setViewVisibility(R.id.empty_view, if (items.any { it.type == "task" }) View.GONE else View.VISIBLE)
+    }
+  }
+
   override fun onUpdate(
     context: Context,
     appWidgetManager: AppWidgetManager,
@@ -210,11 +241,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
       Log.e(TAG, "HomeWidgetPlugin.getData failed", e)
       null
     }
-    val items = if (prefs != null) loadItems(prefs) else emptyList()
     val colorConfig = loadColorConfig(prefs)
-    // Extract tasklist title from data
-    val taskListTitle = items.firstOrNull { it.type == "tasklist" }?.title ?: ""
-    val hasTasks = items.any { it.type == "task" }
     val pending = try {
       openAppIntent(context)
     } catch (e: Exception) {
@@ -223,42 +250,11 @@ class TaskWidgetProvider : AppWidgetProvider() {
     }
 
     for (widgetId in appWidgetIds) {
-      val views = RemoteViews(context.packageName, R.layout.task_widget)
       try {
-        views.setInt(R.id.widget_title_background, "setColorFilter", colorConfig.backgroundColor or 0xFF000000.toInt())
-        views.setInt(R.id.widget_title_background, "setImageAlpha", colorConfig.backgroundColor ushr 24)
-        views.setInt(R.id.widget_background, "setColorFilter", colorConfig.backgroundColor or 0xFF000000.toInt())
-        views.setInt(R.id.widget_background, "setImageAlpha", colorConfig.backgroundColor ushr 24)
-        // Set task list title from data
-        views.setTextViewText(R.id.task_list_title, taskListTitle)
-        views.setInt(R.id.task_list_title, "setTextColor", colorConfig.textColor)
-        if (pending != null) {
-          views.setOnClickPendingIntent(R.id.task_list_title, pending)
+        appWidgetManager.updateAppWidget(widgetId, buildViews(context, widgetId))
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+          appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.task_list)
         }
-
-        // Set up scrollable list adapter for task items (groups + tasks)
-        val listIntent = Intent(context, TaskWidgetService::class.java).apply {
-          putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
-          data = Uri.parse("remindme://widget/$widgetId")
-        }
-        views.setRemoteAdapter(R.id.task_list, listIntent)
-
-        // Set up empty view (shown when list is empty)
-        views.setEmptyView(R.id.task_list, R.id.empty_view)
-
-        // Show/hide empty view based on whether there are tasks
-        views.setViewVisibility(
-          R.id.empty_view,
-          if (hasTasks) View.GONE else View.VISIBLE,
-        )
-
-        views.setInt(R.id.empty_view, "setTextColor", colorConfig.textColor)
-        if (pending != null) {
-          views.setOnClickPendingIntent(R.id.widget_root, pending)
-          views.setOnClickPendingIntent(R.id.empty_view, pending)
-        }
-        appWidgetManager.updateAppWidget(widgetId, views)
-        appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.task_list)
       } catch (e: Exception) {
         Log.e(TAG, "Failed to update widget $widgetId, rendering fallback", e)
         val fallback = buildBaseViews(context, pending, colorConfig)

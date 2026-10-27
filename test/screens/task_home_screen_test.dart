@@ -27,6 +27,73 @@ class _DeletionRepository extends MockTasksRepository {
 }
 
 void main() {
+  for (final save in [true, false]) {
+    testWidgets(
+      'widget appearance should ${save ? 'save settings before refreshing' : 'keep settings unchanged'} when edits are ${save ? 'saved' : 'cancelled'}',
+      (tester) async {
+        final calls = <MethodCall>[];
+        final saved = Completer<bool>();
+        const channel = MethodChannel('home_widget');
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          (call) async {
+            calls.add(call);
+            if (call.method == 'saveWidgetData' &&
+                (call.arguments as Map)['id'] == 'task_widget_config') {
+              return saved.future;
+            }
+            if (call.method == 'getWidgetData') return null;
+            return true;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            channel,
+            null,
+          ),
+        );
+        final repo = MockTasksRepository()
+          ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
+          ..mockTasks.add(Task(id: 'open', title: 'Open task'))
+          ..signInMock(tasklistId: 'list-1');
+        await tester.pumpWidget(
+          ChangeNotifierProvider<TasksRepository>.value(
+            value: repo,
+            child: MaterialApp(
+              theme: createAppTheme(),
+              home: const TaskHomeScreen(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.more_vert));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Widget appearance'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Dark'));
+        await tester.pumpAndSettle();
+        calls.clear();
+        await tester.tap(find.text(save ? 'Save appearance' : 'Cancel'));
+        await tester.pumpAndSettle();
+        if (save) {
+          expect(calls.map((call) => call.method), ['saveWidgetData']);
+          expect(
+            (calls.single.arguments as Map)['data'],
+            contains('4280754481'),
+          );
+          saved.complete(true);
+          await tester.pumpAndSettle();
+          expect(calls.map((call) => call.method), [
+            'saveWidgetData',
+            'updateWidget',
+          ]);
+        } else {
+          expect(calls, isEmpty);
+        }
+        expect(find.text('Widget appearance'), findsNothing);
+      },
+    );
+  }
   testWidgets(
     'delete completed tasks should show progress popup over listing when deletion is in progress',
     (tester) async {
