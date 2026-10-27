@@ -186,6 +186,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
 
   private fun buildBaseViews(context: Context, pending: PendingIntent?, colorConfig: WidgetColorConfig): RemoteViews {
     return RemoteViews(context.packageName, R.layout.task_widget).apply {
+      setInt(R.id.widget_title_background, "setColorFilter", colorConfig.backgroundColor or 0xFF000000.toInt())
+      setInt(R.id.widget_title_background, "setImageAlpha", colorConfig.backgroundColor ushr 24)
       setInt(R.id.widget_background, "setColorFilter", colorConfig.backgroundColor or 0xFF000000.toInt())
       setInt(R.id.widget_background, "setImageAlpha", colorConfig.backgroundColor ushr 24)
       if (pending != null) {
@@ -223,6 +225,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
     for (widgetId in appWidgetIds) {
       val views = RemoteViews(context.packageName, R.layout.task_widget)
       try {
+        views.setInt(R.id.widget_title_background, "setColorFilter", colorConfig.backgroundColor or 0xFF000000.toInt())
+        views.setInt(R.id.widget_title_background, "setImageAlpha", colorConfig.backgroundColor ushr 24)
         views.setInt(R.id.widget_background, "setColorFilter", colorConfig.backgroundColor or 0xFF000000.toInt())
         views.setInt(R.id.widget_background, "setImageAlpha", colorConfig.backgroundColor ushr 24)
         // Set task list title from data
