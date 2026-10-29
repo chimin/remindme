@@ -861,6 +861,11 @@ void main() {
           Task(id: 'undated', title: 'Undated task'),
           Task(id: 'today', title: 'Current task', due: now.toIso8601String()),
           Task(
+            id: 'today-2',
+            title: 'Another current task',
+            due: now.toIso8601String(),
+          ),
+          Task(
             id: 'future',
             title: 'Later task',
             due: now.add(const Duration(days: 1)).toIso8601String(),
@@ -879,13 +884,13 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      for (final category in ['overdue', 'noDueDate', 'today']) {
+      for (final category in ['today']) {
         expect(
           find.byKey(ValueKey('category_count_$category')),
           findsOneWidget,
         );
       }
-      for (final category in ['future', 'completed']) {
+      for (final category in ['overdue', 'noDueDate', 'future', 'completed']) {
         expect(find.byKey(ValueKey('category_count_$category')), findsNothing);
       }
       expect(find.byIcon(Icons.expand_less), findsNWidgets(2));

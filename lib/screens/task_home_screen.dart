@@ -67,7 +67,8 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     final theme = Theme.of(context);
     final collapsible =
         group.category == 'overdue' || group.category == 'noDueDate';
-    final showCount = collapsible || group.category == 'today';
+    final showCount =
+        group.tasks.length > 1 && (collapsible || group.category == 'today');
     final collapsed = _collapsedGroups.contains(group.category);
     final overdue = group.category == 'overdue';
     final parsed = DateTime.tryParse(group.title);
