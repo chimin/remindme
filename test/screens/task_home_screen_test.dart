@@ -27,6 +27,149 @@ class _DeletionRepository extends MockTasksRepository {
 }
 
 void main() {
+  setUp(() {
+    final view = TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
+        .implicitView!;
+    view.physicalSize = const Size(360, 640);
+    view.devicePixelRatio = 1;
+    addTearDown(view.resetPhysicalSize);
+    addTearDown(view.resetDevicePixelRatio);
+  });
+
+  for (final variant in [
+    'empty',
+    'single_task_per_category',
+    'multiple_tasks_per_category',
+    'mixed_overdue_dates',
+    'today_and_tomorrow',
+    'future_dates',
+    'repeating_tasks_with_notes',
+    'long_titles_and_notes',
+  ]) {
+    testWidgets(
+      'listing should match the $variant screenshot when its tasks are loaded',
+      (tester) async {
+        const channel = MethodChannel('home_widget');
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          (_) async => null,
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            channel,
+            null,
+          ),
+        );
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final tomorrow = DateTime(now.year, now.month, now.day + 1);
+        final tasks = <Task>[];
+        void add(
+          String title, {
+          DateTime? due,
+          String? notes,
+          bool done = false,
+        }) {
+          tasks.add(
+            Task(
+              id: 'variant-${tasks.length}',
+              title: title,
+              due: due?.toIso8601String(),
+              notes: notes,
+              status: done ? 'completed' : 'needsAction',
+            ),
+          );
+        }
+
+        switch (variant) {
+          case 'single_task_per_category':
+          case 'multiple_tasks_per_category':
+            final count = variant == 'single_task_per_category' ? 1 : 2;
+            for (var i = 1; i <= count; i++) {
+              add('Overdue task $i', due: DateTime(2000, 1, i));
+              add('Undated task $i');
+              add('Today task $i', due: today);
+              add('Tomorrow task $i', due: tomorrow);
+              add('Future task $i', due: DateTime(2040, 6, 15));
+              add('Completed task $i', due: today, done: true);
+            }
+            break;
+          case 'mixed_overdue_dates':
+            add('Return library books', due: DateTime(2000, 1, 10));
+            add('Submit expense report', due: DateTime(2000, 1, 12));
+            add('Renew membership', due: DateTime(2000, 1, 15));
+            break;
+          case 'today_and_tomorrow':
+            add('Prepare meeting agenda', due: today);
+            add('Buy groceries', due: today, notes: 'Milk, bread, and coffee');
+            add('Collect parcel', due: tomorrow);
+            add('Call the dentist', due: tomorrow);
+            break;
+          case 'future_dates':
+            add('Plan summer holiday', due: DateTime(2040, 6, 15));
+            add('Book accommodation', due: DateTime(2040, 6, 15));
+            add('Review travel checklist', due: DateTime(2040, 6, 20));
+            add('Pack bags', due: DateTime(2040, 7, 1));
+            break;
+          case 'repeating_tasks_with_notes':
+            for (final withDate in [true, false]) {
+              for (final withNotes in [true, false]) {
+                add(
+                  withNotes ? 'Review journal' : 'Take a walk',
+                  due: withDate ? DateTime(2000, 1, 10) : today,
+                  notes: TaskMetadata(
+                    withNotes ? 'Record one highlight from the day.' : '',
+                    {
+                      'recurrence': {'frequency': 'daily'},
+                    },
+                  ).encode(),
+                );
+              }
+            }
+            break;
+          case 'long_titles_and_notes':
+            add(
+              'Review the complete project proposal and prepare detailed feedback for the planning meeting',
+              due: today,
+              notes:
+                  'Check the timeline, budget, dependencies, and outstanding questions. '
+                  'Write down the decisions that need input from the whole team before the next review.',
+            );
+            add(
+              'Organize all the documents needed for the upcoming appointment and confirm the arrangements',
+              due: tomorrow,
+              notes:
+                  'Bring identification and the completed forms.\n'
+                  'Confirm the address and arrival time.\n'
+                  'Leave enough time for the journey.',
+            );
+            break;
+        }
+        final repo = MockTasksRepository()
+          ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
+          ..mockTasks.addAll(tasks)
+          ..signInMock(tasklistId: 'list-1');
+        await tester.pumpWidget(
+          ChangeNotifierProvider<TasksRepository>.value(
+            value: repo,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: createAppTheme(),
+              home: const TaskHomeScreen(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await expectLater(
+          find.byType(MaterialApp),
+          matchesGoldenFile('golden/task_home_screen_$variant.png'),
+        );
+      },
+    );
+  }
+
   for (final save in [true, false]) {
     testWidgets(
       'widget appearance should ${save ? 'save settings before refreshing' : 'keep settings unchanged'} when edits are ${save ? 'saved' : 'cancelled'}',
@@ -211,6 +354,18 @@ void main() {
       expect(find.text('User notes'), findsNWidgets(2));
       expect(find.textContaining('[remindme:'), findsNothing);
       expect(find.byIcon(Icons.repeat), findsNWidgets(2));
+      expect(find.text('daily'), findsNWidgets(2));
+      expect(find.textContaining('Repeats daily'), findsNothing);
+      for (final icon in tester.widgetList<Icon>(find.byIcon(Icons.repeat))) {
+        expect(icon.size, 14);
+      }
+      for (final tile in tester.widgetList<ListTile>(find.byType(ListTile))) {
+        expect(tile.trailing, isNull);
+      }
+      expect(
+        tester.getTopLeft(find.text('User notes').first).dy,
+        lessThan(tester.getTopLeft(find.text('daily').first).dy),
+      );
       await tester.tap(find.text('Pending repeat'));
       await tester.pumpAndSettle();
       expect(find.text('Edit task'), findsNothing);

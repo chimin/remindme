@@ -146,21 +146,44 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     required bool showDate,
   }) {
     final date = DateTime.tryParse(task.due ?? '');
-    final labels = <String>[
-      if (showDate && date != null) formatTaskDate(date, DateTime.now()),
-      if (metadata.frequency != null) 'Repeats ${metadata.frequency!}',
-    ];
-    if (labels.isEmpty && metadata.notes.isEmpty) return null;
+    final dateLabel = showDate && date != null
+        ? formatTaskDate(date, DateTime.now())
+        : null;
+    final frequency = metadata.frequency;
+    if (dateLabel == null && frequency == null && metadata.notes.isEmpty) {
+      return null;
+    }
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (labels.isNotEmpty)
-          Text(
-            labels.join(' · '),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
         if (metadata.notes.isNotEmpty)
           Text(metadata.notes, maxLines: 2, overflow: TextOverflow.ellipsis),
+        if (dateLabel != null || frequency != null)
+          DefaultTextStyle(
+            style: theme.textTheme.bodySmall!,
+            child: Wrap(
+              spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (dateLabel != null) Text(dateLabel),
+                if (frequency != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.repeat,
+                        size: 14,
+                        color: theme.textTheme.bodySmall?.color,
+                        semanticLabel: 'Repeats',
+                      ),
+                      const SizedBox(width: 4),
+                      Text(frequency),
+                    ],
+                  ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -259,12 +282,6 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
                             : null,
                       ),
                     ),
-                    trailing: metadata.frequency == null
-                        ? null
-                        : const Icon(
-                            Icons.repeat,
-                            semanticLabel: 'Repeating task',
-                          ),
                     subtitle: _taskSubtitle(
                       task,
                       metadata,
