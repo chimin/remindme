@@ -14,15 +14,14 @@ import 'task_edit_screen.dart';
 import 'widget_color_config_dialog.dart';
 
 /// Actions available from the app bar overflow menu.
-enum _AppBarAction { toggleCompleted, widgetColors, deleteCompleted, signOut }
+enum _AppBarAction { widgetColors, signOut }
 
 /// Home screen listing the tasks of the selected Google task list.
 ///
 /// The app bar exposes two Material popup menus that share the same styling:
 /// the title acts as a task list switcher (a [PopupMenuButton] with a
 /// dropdown indicator) and the overflow button holds the app wide actions.
-/// Both menus render their entries as [TrailingCheckedMenuItem]s so the active
-/// choice is marked with a checkmark on the right.
+/// The task list menu marks the active list with a checkmark on the right.
 ///
 /// Only one popup can be visible at a time because every Material popup menu
 /// is pushed as a modal route whose barrier swallows taps aimed at the
@@ -49,14 +48,14 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     _loadData();
   }
 
-  List<TaskGroup> _groupTasks({required bool showCompleted}) {
+  List<TaskGroup> _groupTasks() {
     final now = DateTime.now();
     final filtered = _tasks;
     final groups = groupTasksByDueDate(filtered, now, showCompleted: false);
     final completed = filtered
         .where((task) => task.status == 'completed')
         .toList();
-    if (showCompleted && completed.isNotEmpty) {
+    if (completed.isNotEmpty) {
       groups.add(
         TaskGroup(title: 'Completed', category: 'completed', tasks: completed),
       );
@@ -76,7 +75,9 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
         ? group.title
         : formatTaskDate(parsed, DateTime.now());
     final content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: group.category == 'completed'
+          ? const EdgeInsets.fromLTRB(12, 0, 4, 0)
+          : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
           Expanded(
@@ -99,6 +100,12 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
                     ? theme.colorScheme.error
                     : theme.colorScheme.onSurfaceVariant,
               ),
+            ),
+          if (group.category == 'completed')
+            IconButton(
+              tooltip: 'Delete completed tasks',
+              icon: const Icon(Icons.delete_outline, size: 20),
+              onPressed: _deleteCompletedTasks,
             ),
           if (collapsible) ...[
             const SizedBox(width: 12),
@@ -349,14 +356,8 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
 
   Future<void> _handleAppBarAction(_AppBarAction action) async {
     switch (action) {
-      case _AppBarAction.toggleCompleted:
-        await _getRepo().setShowCompleted(!_getRepo().showCompleted);
-        break;
       case _AppBarAction.widgetColors:
         await _openWidgetColorConfig();
-        break;
-      case _AppBarAction.deleteCompleted:
-        await _deleteCompletedTasks();
         break;
       case _AppBarAction.signOut:
         await _signOut();
@@ -487,7 +488,7 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
       (l) => l.id == selectedId,
       orElse: () => TaskList(title: 'Tasks'),
     );
-    final groups = _groupTasks(showCompleted: repo.showCompleted);
+    final groups = _groupTasks();
     final hasVisibleTasks = groups.any((g) => g.tasks.isNotEmpty);
 
     return Scaffold(
@@ -521,19 +522,9 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
 
             onSelected: _handleAppBarAction,
             itemBuilder: (context) => [
-              TrailingCheckedMenuItem<_AppBarAction>(
-                value: _AppBarAction.toggleCompleted,
-                label: 'Show completed tasks',
-                checked: repo.showCompleted,
-              ),
-              const PopupMenuDivider(),
               const PopupMenuItem(
                 value: _AppBarAction.widgetColors,
                 child: Text('Widget appearance'),
-              ),
-              const PopupMenuItem(
-                value: _AppBarAction.deleteCompleted,
-                child: Text('Delete completed tasks'),
               ),
               const PopupMenuItem(
                 value: _AppBarAction.signOut,

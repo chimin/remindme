@@ -21,7 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="8dp">
+            android:padding="6dp">
 
             <include
                 android:id="@+id/task_list_title_container"
@@ -50,7 +50,7 @@
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:padding="8dp">
+            android:padding="6dp">
 
             <ListView
                 android:id="@+id/task_list"
@@ -64,7 +64,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center"
-                android:padding="8dp"
+                android:padding="6dp"
                 android:text="@string/task_widget_empty"
                 android:textSize="16sp"
                 android:textColor="@color/widget_empty_text" />

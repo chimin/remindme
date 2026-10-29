@@ -120,9 +120,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete completed tasks'));
+      await tester.tap(find.byTooltip('Delete completed tasks'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Delete 2 tasks'));
       await tester.pump();
@@ -150,6 +148,8 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.text('Active'), findsOneWidget);
       expect(repo.mockTasks.map((task) => task.id), ['three']);
+      expect(find.text('Completed'), findsNothing);
+      expect(find.byTooltip('Delete completed tasks'), findsNothing);
     },
   );
   setUpAll(() async {
@@ -346,7 +346,7 @@ void main() {
   );
 
   testWidgets(
-    'hide completed tasks should remove completed items when toggle is tapped',
+    'listing should show completed tasks when the saved visibility setting is false',
     (WidgetTester tester) async {
       final messenger = tester.binding.defaultBinaryMessenger;
       messenger.setMockMethodCallHandler(
@@ -386,22 +386,21 @@ void main() {
           ),
         ),
       );
+      await mock.setShowCompleted(false);
       await mock.init();
       mock.signInMock(tasklistId: 'list-1');
       await tester.pumpAndSettle();
 
       expect(find.text('Completed task'), findsOneWidget);
 
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byWidgetPredicate((w) => w is TrailingCheckedMenuItem),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Completed task'), findsNothing);
+      expect(find.text('Completed'), findsOneWidget);
       expect(find.text('Open task'), findsOneWidget);
+      expect(find.byTooltip('Delete completed tasks'), findsOneWidget);
       expect(mock.showCompleted, isFalse);
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile('golden/task_home_screen_completed.png'),
+      );
     },
   );
 
@@ -660,7 +659,7 @@ void main() {
   );
 
   testWidgets(
-    'overflow menu should open at the same height as the task list menu',
+    'overflow menu should align with the task list menu when opened',
     (WidgetTester tester) async {
       final messenger = tester.binding.defaultBinaryMessenger;
       messenger.setMockMethodCallHandler(
@@ -698,7 +697,7 @@ void main() {
       await tester.pumpAndSettle();
       final overflowMenuTop = tester
           .getTopLeft(
-            find.byWidgetPredicate((w) => w is TrailingCheckedMenuItem).first,
+            find.byWidgetPredicate((widget) => widget is PopupMenuItem).first,
           )
           .dy;
 
@@ -706,83 +705,79 @@ void main() {
     },
   );
 
-  testWidgets(
-    'overflow menu should show all actions and match the golden screenshot',
-    (WidgetTester tester) async {
-      final messenger = tester.binding.defaultBinaryMessenger;
-      messenger.setMockMethodCallHandler(
-        MethodChannel('home_widget'),
-        (_) async => null,
-      );
+  testWidgets('overflow menu should show appearance and sign out when opened', (
+    WidgetTester tester,
+  ) async {
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(
+      MethodChannel('home_widget'),
+      (_) async => null,
+    );
 
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
-      final tasks = <Task>[
-        Task(
-          id: '1',
-          title: 'Task',
-          status: 'needsAction',
-          due: today.toIso8601String(),
-        ),
-      ];
+    final tasks = <Task>[
+      Task(
+        id: '1',
+        title: 'Task',
+        status: 'needsAction',
+        due: today.toIso8601String(),
+      ),
+    ];
 
-      final mock = MockTasksRepository()
-        ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
-        ..mockTasks.addAll(tasks);
+    final mock = MockTasksRepository()
+      ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
+      ..mockTasks.addAll(tasks);
 
-      final boundaryKey = GlobalKey();
+    final boundaryKey = GlobalKey();
 
-      await tester.pumpWidget(
-        ChangeNotifierProvider<TasksRepository>.value(
-          value: mock,
-          child: RepaintBoundary(
-            key: boundaryKey,
-            child: MaterialApp(
-              debugShowCheckedModeBanner: false,
-              theme: createAppTheme(),
-              home: const AuthRouter(),
-            ),
+    await tester.pumpWidget(
+      ChangeNotifierProvider<TasksRepository>.value(
+        value: mock,
+        child: RepaintBoundary(
+          key: boundaryKey,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
+            home: const AuthRouter(),
           ),
         ),
+      ),
+    );
+    await mock.init();
+    mock.signInMock(tasklistId: 'list-1');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Show completed tasks'), findsNothing);
+    expect(find.text('Widget appearance'), findsOneWidget);
+    expect(find.text('Delete completed tasks'), findsNothing);
+    expect(find.text('Sign out'), findsOneWidget);
+    expect(find.byIcon(Icons.done), findsNothing);
+
+    final menuResult = await captureAndCompare(
+      tester,
+      find.byKey(boundaryKey),
+      kTaskHomeMenuGoldenPath,
+      'task_home_screen_menu',
+    );
+
+    await tester.binding.runAsync(() async {
+      await writeReport(
+        threshold: kGoldenDiffThreshold,
+        screenshots: <String, dynamic>{'task_home_screen_menu': menuResult},
       );
-      await mock.init();
-      mock.signInMock(tasklistId: 'list-1');
-      await tester.pumpAndSettle();
+    });
 
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Show completed tasks'), findsOneWidget);
-      expect(find.text('Widget appearance'), findsOneWidget);
-      expect(find.text('Delete completed tasks'), findsOneWidget);
-      expect(find.text('Sign out'), findsOneWidget);
-      expect(
-        tester.getTopLeft(find.byIcon(Icons.done)).dx,
-        greaterThan(tester.getTopRight(find.text('Show completed tasks')).dx),
-      );
-
-      final menuResult = await captureAndCompare(
-        tester,
-        find.byKey(boundaryKey),
-        kTaskHomeMenuGoldenPath,
-        'task_home_screen_menu',
-      );
-
-      await tester.binding.runAsync(() async {
-        await writeReport(
-          threshold: kGoldenDiffThreshold,
-          screenshots: <String, dynamic>{'task_home_screen_menu': menuResult},
-        );
-      });
-
-      expect(
-        menuResult['pass'] as bool,
-        isTrue,
-        reason: 'home screen menu golden diff exceeded threshold',
-      );
-    },
-  );
+    expect(
+      menuResult['pass'] as bool,
+      isTrue,
+      reason: 'home screen menu golden diff exceeded threshold',
+    );
+  });
 
   testWidgets(
     'listing should show all tasks and an icon action when the home screen opens',
@@ -913,7 +908,7 @@ void main() {
         final heading = find.byKey(ValueKey('category_${entry.key}'));
         expect(
           find.descendant(of: heading, matching: find.byType(InkWell)),
-          findsNothing,
+          entry.key == 'completed_Completed' ? findsOneWidget : findsNothing,
         );
         await tester.tap(heading);
         await tester.pumpAndSettle();
@@ -961,9 +956,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete completed tasks'));
+      await tester.tap(find.byTooltip('Delete completed tasks'));
       await tester.pumpAndSettle();
       expect(find.text('Clear 1 completed task?'), findsOneWidget);
       expect(find.text('Delete 1 task'), findsOneWidget);
@@ -974,6 +967,7 @@ void main() {
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(repo.mockTasks, hasLength(2));
+      expect(find.text('Finished task'), findsOneWidget);
     },
   );
 }
