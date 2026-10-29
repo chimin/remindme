@@ -18,18 +18,29 @@ class WidgetColorConfigDialog extends StatefulWidget {
 
 class _WidgetColorConfigDialogState extends State<WidgetColorConfigDialog> {
   late WidgetColorConfig _config = widget.initial;
-  static const _dark = WidgetColorConfig(
-    textColor: 0xFFF5F0FA,
-    backgroundColor: 0xFF272131,
-    backgroundAlpha: 242,
-    overdueColor: 0xFFFFB4AB,
-  );
-  String get _preset {
-    if (_config.toJsonString() == const WidgetColorConfig().toJsonString()) {
-      return 'Light';
+  Future<void> _reset() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset widget appearance?'),
+        content: const Text(
+          'Restore all widget colors and opacity to their defaults?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      setState(() => _config = const WidgetColorConfig());
     }
-    if (_config.toJsonString() == _dark.toJsonString()) return 'Dark';
-    return 'Custom';
   }
 
   Future<void> _pickColor({
@@ -127,25 +138,6 @@ class _WidgetColorConfigDialogState extends State<WidgetColorConfigDialog> {
             children: [
               _preview(),
               const SizedBox(height: 20),
-              const Text('Theme'),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  for (final preset in ['Light', 'Dark'])
-                    ChoiceChip(
-                      label: Text(preset),
-                      selected: _preset == preset,
-                      onSelected: (_) => setState(
-                        () => _config = preset == 'Light'
-                            ? const WidgetColorConfig()
-                            : _dark,
-                      ),
-                    ),
-                  if (_preset == 'Custom') const Chip(label: Text('Custom')),
-                ],
-              ),
-              const SizedBox(height: 12),
               _ColorRow(
                 label: 'Text color',
                 color: _config.textColor,
@@ -195,32 +187,40 @@ class _WidgetColorConfigDialogState extends State<WidgetColorConfigDialog> {
                 'Higher opacity makes tasks easier to read.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-              TextButton(
-                onPressed: () =>
-                    setState(() => _config = const WidgetColorConfig()),
-                child: const Text('Reset'),
-              ),
             ],
           ),
         ),
       ),
       actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       actions: [
-        Row(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+            FilledButton(
+              onPressed: () {
+                widget.onSaved(_config);
+                Navigator.of(context).pop();
+              },
+              child: const Text('Save appearance'),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: FilledButton(
-                onPressed: () {
-                  widget.onSaved(_config);
-                  Navigator.of(context).pop();
-                },
-                child: const Text('Save appearance'),
-              ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _reset,
+                    child: const Text('Reset'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
