@@ -163,9 +163,13 @@ jobs:
           if [[ -z "$notes" ]]; then
             notes='No new commits since the previous version.'
           fi
+          {
+            printf '## Release notes for %s\n\n' "$TAG_NAME"
+            printf '%s\n' "$notes"
+          } >> "$GITHUB_STEP_SUMMARY"
           # Google Play limits release notes to 500 characters per language.
           if (( ${#notes} > 500 )); then
-            notes="${notes:0:497}..."
+            notes='Many improvements'
           fi
           directory="$RUNNER_TEMP/play-release-notes"
           mkdir -p "$directory"
