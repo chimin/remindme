@@ -139,10 +139,14 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     );
   }
 
-  Widget? _taskSubtitle(Task task, TaskMetadata metadata) {
+  Widget? _taskSubtitle(
+    Task task,
+    TaskMetadata metadata, {
+    required bool showDate,
+  }) {
     final date = DateTime.tryParse(task.due ?? '');
     final labels = <String>[
-      if (date != null) formatTaskDate(date, DateTime.now()),
+      if (showDate && date != null) formatTaskDate(date, DateTime.now()),
       if (metadata.frequency != null) 'Repeats ${metadata.frequency!}',
     ];
     if (labels.isEmpty && metadata.notes.isEmpty) return null;
@@ -260,7 +264,13 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
                             Icons.repeat,
                             semanticLabel: 'Repeating task',
                           ),
-                    subtitle: _taskSubtitle(task, metadata),
+                    subtitle: _taskSubtitle(
+                      task,
+                      metadata,
+                      showDate:
+                          group.category != 'today' &&
+                          group.category != 'future',
+                    ),
                   ),
                 ),
               );

@@ -889,6 +889,19 @@ void main() {
         expect(find.byKey(ValueKey('category_count_$category')), findsNothing);
       }
       expect(find.byIcon(Icons.expand_less), findsNWidgets(2));
+      for (final title in ['Current task', 'Later task']) {
+        final tile = tester.widget<ListTile>(
+          find.ancestor(of: find.text(title), matching: find.byType(ListTile)),
+        );
+        expect(tile.subtitle, isNull);
+      }
+      final overdueTile = tester.widget<ListTile>(
+        find.ancestor(
+          of: find.text('Past task'),
+          matching: find.byType(ListTile),
+        ),
+      );
+      expect(overdueTile.subtitle, isNotNull);
       for (final entry in {
         'overdue_Overdue': 'Past task',
         'noDueDate_No due date': 'Undated task',
