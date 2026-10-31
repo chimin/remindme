@@ -1,0 +1,61 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Remind Me is a simple task management app that keeps your to-dos organized and synced with Google Tasks.">
+    <title>Remind Me - Your day, organized</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #f5f8fc; color: #26364a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.65; }
+        main { max-width: 880px; margin: 0 auto; padding: 72px 24px 40px; }
+        header { max-width: 660px; margin-bottom: 40px; }
+        .app-name { margin: 0 0 16px; color: #245b98; font-weight: 700; letter-spacing: 0.04em; }
+        h1 { margin: 0 0 20px; font-size: clamp(2.25rem, 7vw, 3.5rem); line-height: 1.15; letter-spacing: -0.035em; }
+        .intro { font-size: 1.15rem; color: #4c5e73; }
+        .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+        article { padding: 24px; border: 1px solid #dce5ef; border-radius: 16px; background: #fff; }
+        h2 { margin: 0 0 10px; font-size: 1.1rem; }
+        article p { margin: 0; color: #4c5e73; }
+        .getting-started { margin-top: 36px; }
+        footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid #dce5ef; font-size: 0.95rem; }
+        a { color: #245b98; text-underline-offset: 4px; }
+        a:hover { text-decoration-thickness: 2px; }
+        a:focus-visible { outline: 3px solid #245b98; outline-offset: 5px; border-radius: 2px; }
+        @media (max-width: 640px) {
+            main { padding-top: 40px; }
+            .features { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <p class="app-name">Remind Me</p>
+            <h1>Your day, organized.</h1>
+            <p class="intro">Keep everyday tasks in one clear view. Remind Me is a simple task management app that connects to Google Tasks, helping you keep track of what needs doing and check it off when you're done.</p>
+        </header>
+        <section class="features" aria-label="App features">
+            <article>
+                <h2>Stay on top of tasks</h2>
+                <p>Create and edit tasks, set due dates, and see your to-dos grouped by date. Mark tasks complete as you go.</p>
+            </article>
+            <article>
+                <h2>Sync with Google Tasks</h2>
+                <p>Sign in with your Google account to access your task lists and keep your changes synced with Google Tasks.</p>
+            </article>
+            <article>
+                <h2>A glance from your home screen</h2>
+                <p>Use the Android home screen widget to keep your tasks close at hand, with colors you can customize.</p>
+            </article>
+        </section>
+        <section class="getting-started" aria-labelledby="getting-started-title">
+            <h2 id="getting-started-title">Getting started</h2>
+            <p>Open Remind Me, sign in with Google, and grant access to Google Tasks. Choose a task list and add your first task.</p>
+        </section>
+        <footer>
+            <a href="privacy_policy.html">Privacy Policy</a>
+        </footer>
+    </main>
+</body>
+</html>
