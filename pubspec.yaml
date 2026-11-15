@@ -45,6 +45,8 @@ dependencies:
   workmanager: ^0.10.10
 
 dev_dependencies:
+  patrol: ^4.10.0
+  patrol_cli: ^4.8.0
   google_sign_in_platform_interface: ^3.1.0
   flutter_test:
     sdk: flutter
@@ -55,6 +57,13 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+patrol:
+  app_name: Remind Me
+  test_directory: patrol_test
+  screenshot_on_failure: true
+  android:
+    package_name: chimin.remindme
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

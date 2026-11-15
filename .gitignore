@@ -49,3 +49,7 @@ app.*.map.json
 /.kilo
 # Generated previews and temporary review artifacts
 /output/
+
+# Real-account Patrol evidence and generated test bundle
+/patrol_test/golden/
+/patrol_test/test_bundle.dart

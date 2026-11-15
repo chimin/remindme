@@ -101,6 +101,143 @@ flutter run -d <device> --dart-define-from-file=secrets/build.json
 - Analyze code: `flutter analyze`
 - Run tests: `flutter test --dart-define=GOOGLE_WEB_CLIENT_ID=test123`
 
+## Patrol E2E test (Android, manual only)
+
+This real-account flow signs in, grants **fresh Google Tasks permission**, creates
+a uniquely named task, edits its title and notes, deletes it, and signs out.
+Creation, editing, and deletion are checked directly against Google Tasks as
+well as the app UI. It is separate from `flutter test` and is not run by CI.
+Run it only when E2E execution is explicitly requested.
+
+### Prepare before each run
+
+1. Use a dedicated Google test account on an unlocked **English** Android 10+
+   emulator with Google Play services. Physical devices are refused by the launcher.
+   Add the account to Android beforehand;
+   the test selects it by email and does not enter passwords or handle MFA.
+2. Enable the Tasks API, register this app's package and signing certificate,
+   and add the account to the OAuth consent screen's test users if applicable.
+   Keep the existing `secrets/build.keystore` and `secrets/build.json` configured
+   as described above. Do not commit credentials or screenshots.
+3. In the test account, open
+   [Google Account connections](https://myaccount.google.com/connections), select
+   the OAuth application used by Remind Me, and remove its access/connection.
+   Do this **before every run**. Clearing Android app data does not revoke Google
+   consent. The flow fails if the Tasks permission prompt is absent.
+4. Ensure the device is online, awake and unlocked, and close other account
+   dialogs. Use `adb devices` to obtain its exact serial. Check the account for
+   any `RemindMe Patrol <run ID>` task left by an interrupted previous run and
+   delete only that test task if necessary. Other tasks are preserved.
+
+### Run explicitly
+
+From the repository root, resolve dependencies once:
+
+```text
+flutter pub get
+```
+
+Then invoke the Dart launcher to run the complete lifecycle and record it:
+
+```text
+dart run tool/run_patrol.dart --device <device-id> --account <test-email> --dart-define-from-file secrets/build.json
+```
+
+For the existing unverified development project on the Pixel emulator, use its
+ADB serial (for example `emulator-5554`) and enable the development warning flow:
+
+```text
+dart run tool/run_patrol.dart --device emulator-5554 --account <test-email> --dart-define-from-file secrets/build.json --allow-unverified-app
+```
+
+This runs **login → grant Tasks permission → create task → edit that task →
+delete that task → sign out**. It checks the saved title and notes by reopening
+the editor, verifies creation/update/deletion against Google Tasks, and confirms
+the final signed-out login screen. Existing account tasks are preserved. Do not
+add `--stop-after-home` when running the complete flow.
+
+To verify sign-in through the loaded home screen without creating tasks, add
+`--stop-after-home`. This mode captures login, Tasks consent, and home, then
+signs out during cleanup. It reports a sign-in check, not a full lifecycle pass.
+
+For your own unverified development OAuth project, add `--allow-unverified-app`.
+This explicitly enables **Advanced → Go to Remind Me (unsafe)** on Google's
+development warning screen and captures both warning checkpoints. It only
+follows the link naming **Remind Me**; other app names and account-security
+challenges are not handled. Omit the flag for verified OAuth projects.
+
+The project pins the resolved Patrol CLI through `pubspec.lock`; no global
+Patrol installation or PowerShell script is needed. Use
+`dart run tool/run_patrol.dart --help` for usage without building or running.
+
+The launcher validates the selected device, builds and installs the two test
+APKs, force-stops `chimin.remindme`, and runs `pm clear chimin.remindme` before
+instrumentation. **All local Remind Me app data on that device is erased**,
+including cached tasks, preferences, and saved session state. Sync any real
+pending changes before using the device. The device's Google account and other
+apps are retained. The test requires the initial login screen; it cannot silently
+pass using a restored session.
+
+Only the Patrol lifecycle class is selected, so the existing native screenshot
+fixtures do not execute. Each run uses unique task data. Google screens have a
+60-second idle timeout per sign-in screen and a three-minute overall sign-in
+limit; remote assertions have a 30-second timeout. The launcher returns a nonzero
+exit code for reset, test, screenshot, or video-recording/collection failures.
+
+### Screenshots, video, and failures
+
+Native screenshots (including Google's UI) and the instrumentation log are
+collected into `patrol_test/golden/<run ID>/`, next to the test file. Captures
+cover initial login, Tasks consent before granting, loaded home, the filled
+new-task form, created task, edited form and saved task, the reopened task before
+deletion, deletion result, sign-out confirmation, and final login. A failure
+capture is attempted before cleanup changes the screen. These are review
+artifacts, not pixel-comparison golden tests, and are ignored by Git.
+
+Every explicit run also records one continuous **`test.mp4`** in the same run
+directory. Recording starts before instrumentation launches the app and stops
+after the test and its cleanup return, so it includes the native Google screens
+and the full requested task lifecycle. The launcher waits for recording startup,
+stops only its own encoder process with SIGINT to finalize the MP4, and validates
+that the local file contains media data and its finalized index. It preserves
+partial video on failure when available, and reports an early recorder exit as
+an incomplete-video failure rather than a successful run.
+
+The emulator must support `screenrecord --time-limit 0`; the current Google Play
+Pixel emulator does. Older images that only support three-minute recordings are
+rejected before the build/test starts. No ffmpeg installation is needed. Video
+is scaled to at most 720 pixels wide while preserving the screen aspect ratio.
+`recording.txt` records encoder diagnostics; `device.log` and
+`instrumentation.txt` contain the test logs. Screenshots and videos are produced
+only when you explicitly run the launcher, not during builds or static analysis.
+
+On failure, the test attempts to remove only its own task and sign out. Cleanup
+errors are reported without replacing the original failure. If the process or
+device disconnects, inspect the dedicated account for the reported run ID before
+retrying; remote cleanup cannot be guaranteed after interruption. Screenshots
+and videos may contain the test account email and task data. Abrupt launcher
+termination or device disconnection can prevent MP4 finalization and collection.
+
+If the Tasks prompt is missing, revoke the OAuth connection again. If account
+selection or consent times out, verify the exact email, English device language,
+connectivity, and OAuth configuration. Unexpected Google security challenges or
+consent UI variants require inspection of the failure screenshot. The opt-in
+development warning handling above does not handle MFA or other account-security
+prompts. A successful sign-out revokes the app grant
+through the current app implementation, but preparation still requires checking
+the Google connection before the next run.
+
+If sign-in fails before an account picker appears, inspect the emulator's Google
+Play services logs. The bundled services in an old Google APIs image may reject
+Credential Manager requests with `Unsupported API`. Update Google Play services
+or use a current Google Play emulator image; adding an account alone does not
+update those services.
+
+After device testing, rebuild/install the normal app to replace the Patrol test
+entry point. Implementation-time validation uses dependency resolution and
+static analysis only; running this flow and generating evidence require an
+explicit test-run request.
+
 ## Branding assets
 
 Run from PowerShell in the project root:

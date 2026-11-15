@@ -172,6 +172,7 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         TextFormField(
+                          key: const ValueKey('task_title'),
                           controller: _titleController,
                           decoration: const InputDecoration(
                             labelText: 'Title',
@@ -184,6 +185,7 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
                         ),
                         const SizedBox(height: 16),
                         TextField(
+                          key: const ValueKey('task_notes'),
                           controller: _notesController,
                           decoration: const InputDecoration(
                             labelText: 'Notes',

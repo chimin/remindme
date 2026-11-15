@@ -5,6 +5,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Patrol passes this flag explicitly to both APK build tasks.
+// Regular builds and the screenshot fixture retain AndroidJUnitRunner.
+val patrolE2e = providers.gradleProperty("patrol-enabled").orNull == "true"
+
 android {
     namespace = "chimin.remindme"
     compileSdk = flutter.compileSdkVersion
@@ -26,10 +30,16 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-    versionCode = flutter.versionCode
-    versionName = flutter.versionName
-    testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-}
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+        testInstrumentationRunner = if (patrolE2e)
+            "pl.leancode.patrol.PatrolJUnitRunner"
+        else "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    if (patrolE2e) {
+        sourceSets.getByName("androidTest").java.srcDir("src/patrol/java")
+    }
 
     signingConfigs {
         create("release") {
@@ -57,6 +67,10 @@ android {
 }
 
 dependencies {
+    // Patrol is linked into the debug app. Match its runtime to the existing
+    // instrumentation dependencies for AGP's consistent version resolution.
+    debugImplementation("androidx.test.ext:junit:1.2.1")
+    debugImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.2.0")
