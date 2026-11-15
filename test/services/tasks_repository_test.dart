@@ -233,6 +233,116 @@ void main() {
       }),
     );
   });
+  group('sign out', () {
+    late FakeGooglePlatform platform;
+    late TasksRepository repo;
+    late Directory cache;
+    final widgetCalls = <MethodCall>[];
+    const widgetChannel = MethodChannel('home_widget');
+
+    setUp(() async {
+      platform = FakeGooglePlatform();
+      GoogleSignInPlatform.instance = platform;
+      repo = TasksRepository();
+      cache = await Directory.systemTemp.createTemp('remindme_signout_');
+      SharedPreferences.setMockInitialValues({
+        'remindme_tasklist_id': 'list',
+        'remindme_show_completed': false,
+      });
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (_) async => cache.path,
+      );
+      widgetCalls.clear();
+      messenger.setMockMethodCallHandler(widgetChannel, (call) async {
+        widgetCalls.add(call);
+        return true;
+      });
+      await repo.init();
+      await repo.signIn();
+      for (final list in ['list', 'other']) {
+        await repo.saveCacheEntries(list, [
+          CachedTask(
+            id: 'private',
+            tasklistId: list,
+            title: 'Private task',
+            updatedAt: 1,
+          ),
+        ]);
+      }
+    });
+
+    tearDown(() async {
+      repo.dispose();
+      await platform.events.close();
+      await Hive.close();
+      await cache.delete(recursive: true);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(widgetChannel, null);
+    });
+
+    Future<void> expectCleared() async {
+      expect(repo.signedIn, isFalse);
+      expect(repo.selectedTasklistId, isNull);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('remindme_tasklist_id'), isNull);
+      expect(prefs.getBool('remindme_show_completed'), isFalse);
+      expect(
+        widgetCalls.map((call) => call.method),
+        containsAll(['saveWidgetData', 'updateWidget']),
+      );
+      expect(widgetCalls.first.arguments['data'], isNull);
+      await Hive.close();
+      final box = await Hive.openBox('remindme_tasks_cache');
+      expect(box.isEmpty, isTrue);
+    }
+
+    test(
+      'sign out should clear all persisted tasks when user signs out',
+      () async {
+        await repo.signOut();
+        await expectCleared();
+      },
+    );
+
+    test('sign out should clear local data when disconnect fails', () async {
+      platform.disconnectError = StateError('offline');
+      await expectLater(repo.signOut(), throwsStateError);
+      await expectCleared();
+    });
+
+    test(
+      'sign out should clear late task data when a refresh is in flight',
+      () async {
+        final started = Completer<void>();
+        final response = Completer<http.Response>();
+        await http.runWithClient(
+          () async {
+            await repo.signIn();
+            final refresh = repo.pullFromRemote('list');
+            await started.future;
+            final signOut = repo.signOut();
+            response.complete(
+              http.Response(
+                '{"items":[{"id":"late","title":"Late task"}]}',
+                200,
+                headers: {'content-type': 'application/json'},
+              ),
+            );
+            await refresh;
+            await signOut;
+          },
+          () => MockClient((_) {
+            started.complete();
+            return response.future;
+          }),
+        );
+        await expectCleared();
+      },
+    );
+  });
   group('authentication recovery', () {
     late FakeGooglePlatform platform;
     late TasksRepository repo;
@@ -595,6 +705,7 @@ class FakeGooglePlatform extends GoogleSignInPlatform {
   bool requireConsent = false;
   Object? authError;
   Object? silentError;
+  Object? disconnectError;
   Object? permissionError;
   Future<ClientAuthorizationTokenData?>? pendingPermission;
   @override
@@ -638,7 +749,10 @@ class FakeGooglePlatform extends GoogleSignInPlatform {
   @override
   bool authorizationRequiresUserInteraction() => false;
   @override
-  Future<void> disconnect(DisconnectParams params) async {}
+  Future<void> disconnect(DisconnectParams params) async {
+    if (disconnectError != null) throw disconnectError!;
+  }
+
   @override
   Future<void> signOut(SignOutParams params) async {}
   @override

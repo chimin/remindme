@@ -368,12 +368,22 @@ class TasksRepository extends ChangeNotifier {
 
   Future<void> signOut() async {
     _clearAuthentication();
+    _selectedTasklistId = null;
     authError = null;
     _publishAuth();
     try {
       await _signIn.disconnect();
     } finally {
-      await WidgetService.clearWidget();
+      try {
+        // Let pending task operations finish before deleting their cached data.
+        await _withTaskLock(() async {
+          await _cacheBox?.clear();
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove(_kPrefKey);
+        });
+      } finally {
+        await WidgetService.clearWidget();
+      }
     }
   }
 
