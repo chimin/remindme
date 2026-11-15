@@ -262,6 +262,28 @@ class TasksRepository extends ChangeNotifier {
   bool _googleInitialized = false;
   bool _disposed = false;
   int _authGeneration = 0;
+  static const _kSignInSucceededPrefKey = 'remindme_sign_in_succeeded';
+  Future<void> _authPreferenceWork = Future.value();
+  Future<void>? _authCleanup;
+  bool _awaitingRestoreEvent = false;
+  bool _signingOut = false;
+
+  Future<void> _saveSignInSuccess(bool success, {int? generation}) {
+    final result = _authPreferenceWork.then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      if (generation != null && (_disposed || generation != _authGeneration)) {
+        return;
+      }
+      if (!await prefs.setBool(_kSignInSucceededPrefKey, success)) {
+        throw StateError('Unable to save sign-in state');
+      }
+    });
+    _authPreferenceWork = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
+  }
 
   void _publishAuth() {
     if (!_disposed) notifyListeners();
@@ -269,21 +291,68 @@ class TasksRepository extends ChangeNotifier {
 
   void _clearAuthentication() {
     _authGeneration++;
+    _awaitingRestoreEvent = false;
     _currentUser = null;
     _authorization = null;
     _tasksApi = null;
     signingIn = false;
   }
 
-  void _authenticationFailed(Object error, StackTrace stack) {
+  Future<void> _authenticationFailed(Object error, StackTrace stack) {
     logError('Sign in failed', error, stack);
+    return _resetSignInSession(
+      error:
+          error is GoogleSignInException &&
+              error.code == GoogleSignInExceptionCode.canceled
+          ? null
+          : 'Unable to sign in. Please try again.',
+    );
+  }
+
+  Future<void> _resetSignInSession({String? error, bool clearGoogle = true}) {
+    final cleanup = _authCleanup;
+    if (cleanup != null) return cleanup;
     _clearAuthentication();
-    authError =
-        error is GoogleSignInException &&
-            error.code == GoogleSignInExceptionCode.canceled
-        ? null
-        : 'Unable to sign in. Please try again.';
+    final generation = _authGeneration;
+    signingIn = true;
+    authError = error;
     _publishAuth();
+    return _authCleanup = _finishSignInReset(generation, clearGoogle);
+  }
+
+  Future<void> _clearGoogleSession() async {
+    _signingOut = true;
+    try {
+      await _signIn.signOut();
+    } finally {
+      // The platform and SDK relay sign-out through separate async streams.
+      // Keep our own sign-out events suppressed until both have delivered.
+      await Future<void>.delayed(Duration.zero);
+      _signingOut = false;
+    }
+  }
+
+  Future<void> _finishSignInReset(int generation, bool clearGoogle) async {
+    try {
+      try {
+        await _saveSignInSuccess(false);
+      } catch (error, stack) {
+        logError('Failed to clear saved sign-in state', error, stack);
+      }
+      if (clearGoogle && _googleInitialized) {
+        try {
+          await _clearGoogleSession();
+        } catch (error, stack) {
+          logError('Failed to clear Google sign-in session', error, stack);
+        }
+      }
+    } finally {
+      _authCleanup = null;
+      if (!_disposed && generation == _authGeneration) {
+        signingIn = false;
+        _publishAuth();
+      }
+    }
   }
 
   Future<void> _initializeGoogle() async {
@@ -296,16 +365,25 @@ class TasksRepository extends ChangeNotifier {
     _googleInitialized = true;
     _sub = _signIn.authenticationEvents.listen(
       (event) {
+        if (_disposed || _authCleanup != null || _signingOut) return;
         if (event is GoogleSignInAuthenticationEventSignOut) {
-          _clearAuthentication();
-          _publishAuth();
+          unawaited(_resetSignInSession(clearGoogle: false));
         } else if (event is GoogleSignInAuthenticationEventSignIn &&
-            !signingIn) {
+            !signingIn &&
+            (signedIn || _awaitingRestoreEvent)) {
+          _awaitingRestoreEvent = false;
           unawaited(_acceptEvent(event.user));
         }
       },
       onError: (Object error, StackTrace stack) {
-        _authenticationFailed(error, stack);
+        // Active attempts handle their own Future errors. Ignore stale events
+        // once the app has returned to the sign-in page.
+        if (!_disposed &&
+            !signingIn &&
+            !_signingOut &&
+            (signedIn || _awaitingRestoreEvent)) {
+          unawaited(_authenticationFailed(error, stack));
+        }
       },
     );
   }
@@ -313,10 +391,15 @@ class TasksRepository extends ChangeNotifier {
   Future<void> _acceptEvent(GoogleSignInAccount user) async {
     signingIn = true;
     final generation = ++_authGeneration;
+    _publishAuth();
     try {
+      await _saveSignInSuccess(false);
+      if (_disposed || generation != _authGeneration) return;
       await _completeSignIn(user, generation);
     } catch (error, stack) {
-      if (generation == _authGeneration) _authenticationFailed(error, stack);
+      if (generation == _authGeneration) {
+        await _authenticationFailed(error, stack);
+      }
     } finally {
       if (generation == _authGeneration) {
         signingIn = false;
@@ -334,11 +417,31 @@ class TasksRepository extends ChangeNotifier {
     signingIn = true;
     final generation = ++_authGeneration;
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final canRestore = prefs.getBool(_kSignInSucceededPrefKey) ?? false;
+      await _saveSignInSuccess(false);
       await _initializeGoogle();
-      final account = await _signIn.attemptLightweightAuthentication();
-      if (account != null) await _completeSignIn(account, generation);
+      if (_disposed || generation != _authGeneration) return;
+      if (canRestore) {
+        _awaitingRestoreEvent = true;
+        final attempt = _signIn.attemptLightweightAuthentication();
+        if (attempt != null) {
+          final account = await attempt;
+          if (_disposed || generation != _authGeneration) return;
+          _awaitingRestoreEvent = false;
+          if (account != null) {
+            await _completeSignIn(account, generation);
+          } else {
+            await _resetSignInSession();
+          }
+        }
+      } else {
+        await _resetSignInSession();
+      }
     } catch (error, stack) {
-      _authenticationFailed(error, stack);
+      if (generation == _authGeneration) {
+        await _authenticationFailed(error, stack);
+      }
     } finally {
       signingIn = false;
       initialized = true;
@@ -347,17 +450,24 @@ class TasksRepository extends ChangeNotifier {
   }
 
   Future<void> signIn() async {
-    if (signingIn) return;
+    if (signingIn || _authCleanup != null || _signingOut || _disposed) return;
+    _awaitingRestoreEvent = false;
     signingIn = true;
     authError = null;
     final generation = ++_authGeneration;
     _publishAuth();
     try {
+      await _saveSignInSuccess(false);
       await _initializeGoogle();
+      // A previous cleanup may have failed; retry before starting a new flow.
+      await _clearGoogleSession();
+      if (_disposed || generation != _authGeneration) return;
       final user = await _signIn.authenticate();
       await _completeSignIn(user, generation);
     } catch (error, stack) {
-      if (generation == _authGeneration) _authenticationFailed(error, stack);
+      if (generation == _authGeneration) {
+        await _authenticationFailed(error, stack);
+      }
     } finally {
       if (generation == _authGeneration) {
         signingIn = false;
@@ -367,11 +477,15 @@ class TasksRepository extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    if (_authCleanup != null) await _authCleanup;
+    _signingOut = true;
     _clearAuthentication();
+    signingIn = true;
     _selectedTasklistId = null;
     authError = null;
     _publishAuth();
     try {
+      await _saveSignInSuccess(false);
       await _signIn.disconnect();
     } finally {
       try {
@@ -383,19 +497,27 @@ class TasksRepository extends ChangeNotifier {
         });
       } finally {
         await WidgetService.clearWidget();
+        await Future<void>.delayed(Duration.zero);
+        _signingOut = false;
+        signingIn = false;
+        _publishAuth();
       }
     }
   }
 
   Future<void> _completeSignIn(GoogleSignInAccount user, int generation) async {
+    if (_disposed || generation != _authGeneration) return;
     final client = user.authorizationClient;
     final authorization =
         await client.authorizationForScopes(googleTasksScopes) ??
         await client.authorizeScopes(googleTasksScopes);
     if (_disposed || generation != _authGeneration) return;
+    final api = _buildClient(authorization);
+    await _saveSignInSuccess(true, generation: generation);
+    if (_disposed || generation != _authGeneration) return;
     _currentUser = user;
     _authorization = authorization;
-    _tasksApi = _buildClient(authorization);
+    _tasksApi = api;
     authError = null;
     _publishAuth();
     try {
@@ -479,9 +601,9 @@ class TasksRepository extends ChangeNotifier {
       return await fn();
     } on DetailedApiRequestError catch (e) {
       if (e.status == 401) {
-        _clearAuthentication();
-        authError = 'Your session expired. Please sign in again.';
-        _publishAuth();
+        await _resetSignInSession(
+          error: 'Your session expired. Please sign in again.',
+        );
       }
       rethrow;
     }

@@ -288,6 +288,7 @@ void main() {
       expect(repo.selectedTasklistId, isNull);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('remindme_tasklist_id'), isNull);
+      expect(prefs.getBool('remindme_sign_in_succeeded'), isFalse);
       expect(prefs.getBool('remindme_show_completed'), isFalse);
       expect(
         widgetCalls.map((call) => call.method),
@@ -365,11 +366,269 @@ void main() {
       await Hive.close();
       await cache.delete(recursive: true);
     });
+    Future<void> settleAuthentication() async {
+      // Deliver queued platform events, then wait for asynchronous cleanup.
+      await Future<void>.delayed(Duration.zero);
+      if (!repo.signingIn) return;
+      final idle = Completer<void>();
+      void listener() {
+        if (!repo.signingIn && !idle.isCompleted) idle.complete();
+      }
+
+      repo.addListener(listener);
+      try {
+        await idle.future;
+      } finally {
+        repo.removeListener(listener);
+      }
+    }
+
+    Future<bool?> savedSuccess() async =>
+        (await SharedPreferences.getInstance()).getBool(
+          'remindme_sign_in_succeeded',
+        );
+
+    Future<void> restart() async {
+      repo.dispose();
+      await platform.events.close();
+      await Hive.close();
+      platform = FakeGooglePlatform()
+        ..restoreUser = platform.restoreUser
+        ..silentAttempts = platform.silentAttempts
+        ..signOutCalls = platform.signOutCalls;
+      GoogleSignInPlatform.instance = platform;
+      repo = TasksRepository();
+      await repo.init();
+    }
+
+    void emitSignIn() {
+      platform.events.add(
+        AuthenticationEventSignIn(
+          user: FakeGooglePlatform.user,
+          authenticationTokens: FakeGooglePlatform.tokens,
+        ),
+      );
+    }
+
+    test(
+      'initialize should clear leftover sessions when no successful sign in was saved',
+      () async {
+        platform.restoreUser = true;
+        await repo.init();
+        expect(platform.silentAttempts, 0);
+        expect(platform.signOutCalls, 1);
+        expect(repo.signedIn, isFalse);
+        expect(await savedSuccess(), isFalse);
+        emitSignIn();
+        await settleAuthentication();
+        expect(repo.signedIn, isFalse);
+      },
+    );
+
+    test(
+      'initialize should restore the previous session when sign in succeeded',
+      () async {
+        await repo.signIn();
+        expect(await savedSuccess(), isTrue);
+        platform.restoreUser = true;
+        await restart();
+        expect(platform.silentAttempts, 1);
+        expect(repo.signedIn, isTrue);
+        expect(await savedSuccess(), isTrue);
+      },
+    );
+
+    test(
+      'initialize should accept a restore event when the platform returns no future',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'remindme_sign_in_succeeded': true,
+        });
+        platform.eventOnlyRestore = true;
+        await repo.init();
+        expect(repo.signedIn, isFalse);
+        expect(repo.signingIn, isFalse);
+        emitSignIn();
+        await settleAuthentication();
+        expect(repo.signedIn, isTrue);
+        expect(await savedSuccess(), isTrue);
+      },
+    );
+
+    test(
+      'initialize should clear a failed restore when the platform reports an event error',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'remindme_sign_in_succeeded': true,
+        });
+        platform.eventOnlyRestore = true;
+        await repo.init();
+        platform.events.add(
+          AuthenticationEventException(
+            const GoogleSignInException(
+              code: GoogleSignInExceptionCode.interrupted,
+            ),
+          ),
+        );
+        await settleAuthentication();
+        emitSignIn();
+        await settleAuthentication();
+        expect(repo.signedIn, isFalse);
+        expect(repo.signingIn, isFalse);
+        expect(await savedSuccess(), isFalse);
+        expect(platform.signOutCalls, 1);
+      },
+    );
+
+    test(
+      'initialize should clear saved success when no Google session remains',
+      () async {
+        await repo.signIn();
+        await restart();
+        expect(platform.silentAttempts, 1);
+        expect(repo.signedIn, isFalse);
+        expect(await savedSuccess(), isFalse);
+        await restart();
+        expect(platform.silentAttempts, 1);
+      },
+    );
+
+    test(
+      'initialize should skip restoration when a later sign in failed',
+      () async {
+        await repo.signIn();
+        platform.authError = StateError('offline');
+        await repo.signIn();
+        expect(await savedSuccess(), isFalse);
+        final signOuts = platform.signOutCalls;
+        platform.restoreUser = true;
+        await restart();
+        expect(platform.silentAttempts, 0);
+        expect(platform.signOutCalls, signOuts + 1);
+        expect(repo.signedIn, isFalse);
+      },
+    );
+
+    test(
+      'sign in should clear the session when authentication is canceled',
+      () async {
+        platform.authError = const GoogleSignInException(
+          code: GoogleSignInExceptionCode.canceled,
+        );
+        await repo.signIn();
+        expect(platform.signOutCalls, 2);
+        expect(platform.disconnectCalls, 0);
+        expect(await savedSuccess(), isFalse);
+        expect(repo.authError, isNull);
+        emitSignIn();
+        await settleAuthentication();
+        expect(repo.signedIn, isFalse);
+      },
+    );
+
+    test(
+      'sign in should block retries when failed session cleanup is pending',
+      () async {
+        final pending = Completer<void>();
+        platform.pendingSignOut = pending.future;
+        platform.blockSignOutAfter = 1;
+        platform.authError = StateError('offline');
+        final attempt = repo.signIn();
+        await platform.cleanupStarted.future;
+        expect(repo.signingIn, isTrue);
+        expect(await savedSuccess(), isFalse);
+        emitSignIn();
+        await repo.signIn();
+        expect(platform.manualAttempts, 1);
+        pending.complete();
+        await attempt;
+        expect(repo.signingIn, isFalse);
+        expect(repo.signedIn, isFalse);
+        expect(repo.authError, isNotNull);
+        platform.pendingSignOut = null;
+        platform.authError = null;
+        await repo.signIn();
+        expect(repo.signedIn, isTrue);
+        expect(await savedSuccess(), isTrue);
+      },
+    );
+
+    test(
+      'sign in should keep restoration disabled when Google cleanup fails',
+      () async {
+        platform.signOutError = StateError('cleanup failed');
+        await repo.signIn();
+        expect(repo.signingIn, isFalse);
+        expect(repo.signedIn, isFalse);
+        expect(await savedSuccess(), isFalse);
+        emitSignIn();
+        await settleAuthentication();
+        expect(repo.signedIn, isFalse);
+        platform.signOutError = null;
+        platform.restoreUser = true;
+        await restart();
+        expect(platform.silentAttempts, 0);
+        await repo.signIn();
+        expect(repo.signedIn, isTrue);
+      },
+    );
+
+    test(
+      'sign in should ignore stale events when a failed attempt returned to login',
+      () async {
+        platform.permissionError = StateError('denied');
+        await repo.signIn();
+        expect(platform.signOutCalls, 2);
+        expect(await savedSuccess(), isFalse);
+        platform.permissionError = null;
+        emitSignIn();
+        await settleAuthentication();
+        expect(repo.signedIn, isFalse);
+        expect(platform.manualAttempts, 1);
+        expect(await savedSuccess(), isFalse);
+      },
+    );
+
+    test(
+      'initialize should skip restoration when the user signed out',
+      () async {
+        await repo.init();
+        await repo.signIn();
+        await repo.signOut();
+        platform.restoreUser = true;
+        await restart();
+        expect(platform.silentAttempts, 0);
+        expect(repo.signedIn, isFalse);
+        expect(await savedSuccess(), isFalse);
+      },
+    );
+
+    test(
+      'authentication event should clear saved success when Google signs out',
+      () async {
+        await repo.signIn();
+        platform.events.add(AuthenticationEventSignOut());
+        await settleAuthentication();
+        expect(repo.signedIn, isFalse);
+        expect(await savedSuccess(), isFalse);
+      },
+    );
+
     test(
       'initialize should show signed out state when silent sign in fails',
       () async {
+        SharedPreferences.setMockInitialValues({
+          'remindme_sign_in_succeeded': true,
+        });
         platform.silentError = StateError('offline');
         await repo.init();
+        expect(platform.silentAttempts, 1);
+        expect(
+          (await SharedPreferences.getInstance()).getBool(
+            'remindme_sign_in_succeeded',
+          ),
+          isFalse,
+        );
         expect(repo.initialized, isTrue);
         expect(repo.signedIn, isFalse);
         expect(repo.signingIn, isFalse);
@@ -432,6 +691,7 @@ void main() {
         await repo.signIn();
         expect(repo.signedIn, isTrue);
         expect(repo.signingIn, isFalse);
+        expect(await savedSuccess(), isTrue);
       },
     );
     test(
@@ -445,7 +705,7 @@ void main() {
             authenticationTokens: FakeGooglePlatform.tokens,
           ),
         );
-        await Future<void>.delayed(Duration.zero);
+        await settleAuthentication();
         expect(repo.signedIn, isFalse);
         expect(repo.signingIn, isFalse);
         expect(repo.authError, isNotNull);
@@ -462,7 +722,7 @@ void main() {
             ),
           ),
         );
-        await Future<void>.delayed(Duration.zero);
+        await settleAuthentication();
         expect(repo.signedIn, isFalse);
         expect(repo.signingIn, isFalse);
       },
@@ -492,6 +752,8 @@ void main() {
         expect(repo.signedIn, isFalse);
         expect(repo.signingIn, isFalse);
         expect(repo.authError, contains('expired'));
+        expect(await savedSuccess(), isFalse);
+        expect(platform.signOutCalls, 2);
       },
     );
     test(
@@ -500,9 +762,9 @@ void main() {
         final pending = Completer<ClientAuthorizationTokenData?>();
         platform.pendingPermission = pending.future;
         final attempt = repo.signIn();
-        await Future<void>.delayed(Duration.zero);
+        await platform.permissionStarted.future;
         platform.events.add(AuthenticationEventSignOut());
-        await Future<void>.delayed(Duration.zero);
+        await settleAuthentication();
         pending.complete(
           const ClientAuthorizationTokenData(accessToken: 'token'),
         );
@@ -706,6 +968,17 @@ class FakeGooglePlatform extends GoogleSignInPlatform {
   Object? authError;
   Object? silentError;
   Object? disconnectError;
+  Object? signOutError;
+  bool restoreUser = false;
+  bool eventOnlyRestore = false;
+  int silentAttempts = 0;
+  int manualAttempts = 0;
+  int signOutCalls = 0;
+  int disconnectCalls = 0;
+  int blockSignOutAfter = 0;
+  Future<void>? pendingSignOut;
+  final cleanupStarted = Completer<void>();
+  final permissionStarted = Completer<void>();
   Object? permissionError;
   Future<ClientAuthorizationTokenData?>? pendingPermission;
   @override
@@ -716,17 +989,27 @@ class FakeGooglePlatform extends GoogleSignInPlatform {
   }
 
   @override
-  Future<AuthenticationResults?> attemptLightweightAuthentication(
+  Future<AuthenticationResults?>? attemptLightweightAuthentication(
     AttemptLightweightAuthenticationParameters params,
-  ) async {
-    if (silentError != null) throw silentError!;
-    return null;
+  ) {
+    silentAttempts++;
+    if (eventOnlyRestore) return null;
+    if (silentError != null) return Future.error(silentError!);
+    return Future.value(
+      restoreUser
+          ? const AuthenticationResults(
+              user: user,
+              authenticationTokens: tokens,
+            )
+          : null,
+    );
   }
 
   @override
   Future<AuthenticationResults> authenticate(
     AuthenticateParameters params,
   ) async {
+    manualAttempts++;
     if (authError != null) throw authError!;
     return const AuthenticationResults(
       user: user,
@@ -740,7 +1023,10 @@ class FakeGooglePlatform extends GoogleSignInPlatform {
   ) async {
     if (requireConsent && !params.request.promptIfUnauthorized) return null;
     if (permissionError != null) throw permissionError!;
-    if (pendingPermission != null) return pendingPermission;
+    if (pendingPermission != null) {
+      if (!permissionStarted.isCompleted) permissionStarted.complete();
+      return pendingPermission;
+    }
     return const ClientAuthorizationTokenData(accessToken: 'token');
   }
 
@@ -750,11 +1036,22 @@ class FakeGooglePlatform extends GoogleSignInPlatform {
   bool authorizationRequiresUserInteraction() => false;
   @override
   Future<void> disconnect(DisconnectParams params) async {
+    disconnectCalls++;
+    events.add(AuthenticationEventSignOut());
     if (disconnectError != null) throw disconnectError!;
   }
 
   @override
-  Future<void> signOut(SignOutParams params) async {}
+  Future<void> signOut(SignOutParams params) async {
+    signOutCalls++;
+    events.add(AuthenticationEventSignOut());
+    if (signOutError != null) throw signOutError!;
+    if (pendingSignOut != null && signOutCalls > blockSignOutAfter) {
+      if (!cleanupStarted.isCompleted) cleanupStarted.complete();
+      await pendingSignOut;
+    }
+  }
+
   @override
   Future<ServerAuthorizationTokenData?> serverAuthorizationTokensForScopes(
     ServerAuthorizationTokensForScopesParameters params,
