@@ -125,4 +125,40 @@ class TaskWidgetProviderTest {
       assertEquals(0, view.findViewById<ListView>(R.id.task_list).adapter.count)
     }
   }
+
+  @Test
+  fun buildViewsShouldShowMatchingCategoryLabelsWhenTasksSpanDates() = withPreferences {
+    HomeWidgetPlugin.getData(context).edit()
+      .remove(TaskWidgetProvider.CONFIG_KEY)
+      .putString(TaskWidgetProvider.DATA_KEY, """
+        [{"type":"tasklist","title":"Tasks"},
+         {"type":"header","title":"Overdue","category":"overdue"},
+         {"type":"task","title":"Pay invoice","completed":false},
+         {"type":"header","title":"No due date","category":"noDueDate"},
+         {"type":"task","title":"Organize notes","completed":false},
+         {"type":"header","title":"Today","category":"today"},
+         {"type":"task","title":"Send report","completed":false},
+         {"type":"header","title":"Tomorrow","category":"future"},
+         {"type":"task","title":"Collect parcel","completed":false},
+         {"type":"header","title":"Sat, Jan 2, 2027","category":"future"},
+         {"type":"task","title":"Call the dentist","completed":false}]
+      """.trimIndent()).commit()
+    instrumentation.runOnMainSync {
+      val view = TaskWidgetProvider().buildViews(context, 101)
+        .apply(context, AppWidgetHostView(context))
+      val list = view.findViewById<ListView>(R.id.task_list)
+      val expected = listOf("Overdue", "No due date", "Today", "Tomorrow", "Sat, Jan 2, 2027")
+      assertEquals(10, list.adapter.count)
+      expected.forEachIndexed { index, title ->
+        val header = list.adapter.getView(index * 2, null, list)
+        assertEquals(title, header.findViewById<TextView>(R.id.group_title).text.toString())
+      }
+      view.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
+        View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY))
+      view.layout(0, 0, 600, 1000)
+      ScreenshotCapture.captureScreenshot("task_widget_categories.png",
+        ScreenshotCapture.renderToBitmap(view), context)
+    }
+  }
+
 }

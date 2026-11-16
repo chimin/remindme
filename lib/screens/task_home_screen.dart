@@ -95,10 +95,7 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
         group.tasks.length > 1 && (collapsible || group.category == 'today');
     final collapsed = _collapsedGroups.contains(group.category);
     final overdue = group.category == 'overdue';
-    final parsed = DateTime.tryParse(group.title);
-    final title = parsed == null
-        ? group.title
-        : formatTaskDate(parsed, DateTime.now());
+    final title = formatTaskGroupTitle(group.title, DateTime.now());
     final content = Padding(
       padding: group.category == 'completed'
           ? const EdgeInsets.fromLTRB(12, 0, 4, 0)

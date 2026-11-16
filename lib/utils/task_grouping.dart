@@ -100,7 +100,7 @@ List<Map<String, dynamic>> buildWidgetDisplayItems(
   for (final group in groups) {
     items.add({
       'type': 'header',
-      'title': group.title,
+      'title': formatTaskGroupTitle(group.title, now),
       'category': group.category,
     });
     for (final task in group.tasks) {
@@ -114,6 +114,12 @@ List<Map<String, dynamic>> buildWidgetDisplayItems(
     }
   }
   return items;
+}
+
+/// Formats a group header consistently for the home screen and Android widget.
+String formatTaskGroupTitle(String title, DateTime now) {
+  final date = DateTime.tryParse(title);
+  return date == null ? title : formatTaskDate(date, now);
 }
 
 /// Formats the calendar date stored by Google Tasks without shifting timezones.

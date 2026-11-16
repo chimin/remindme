@@ -41,60 +41,65 @@ void main() {
     expect(items[1]['title'], 'Broken due date');
   });
 
-  test('groups by Overdue, No due date, Today then future in order', () {
-    final now = DateTime(2026, 1, 15, 10);
-    final tasks = [
-      // overdue, different dates
-      Task(id: 'overdue1', title: 'Overdue task 1', due: '2026-01-10'),
-      Task(id: 'overdue2', title: 'Overdue task 2', due: '2026-01-05'),
-      // no due date
-      Task(id: 'nodate1', title: 'No due date task 1'),
-      // today
-      Task(id: 'today1', title: 'Today task 1', due: '2026-01-15'),
-      Task(id: 'today2', title: 'Today task 2', due: '2026-01-15'),
-      // future, different dates
-      Task(id: 'future1', title: 'Future task 1', due: '2026-01-16'),
-      Task(id: 'future2', title: 'Future task 2', due: '2026-01-20'),
-    ];
+  test(
+    'buildWidgetDisplayItems should order headers and tasks when due dates span categories',
+    () {
+      final now = DateTime(2026, 1, 15, 10);
+      final tasks = [
+        // overdue, different dates
+        Task(id: 'overdue1', title: 'Overdue task 1', due: '2026-01-10'),
+        Task(id: 'overdue2', title: 'Overdue task 2', due: '2026-01-05'),
+        // no due date
+        Task(id: 'nodate1', title: 'No due date task 1'),
+        // today
+        Task(id: 'today1', title: 'Today task 1', due: '2026-01-15'),
+        Task(id: 'today2', title: 'Today task 2', due: '2026-01-15'),
+        // future, different dates
+        Task(id: 'future1', title: 'Future task 1', due: '2026-01-16'),
+        Task(id: 'future2', title: 'Future task 2', due: '2026-01-20'),
+      ];
 
-    final items = buildWidgetDisplayItems(tasks, now);
+      final items = buildWidgetDisplayItems(tasks, now);
 
-    // Overdue header + 2 tasks (combined despite different dates), No due date
-    // header + 1 task, Today header + 2 tasks, two future headers + 1 task
-    // each (future groups by exact date)
-    expect(items.map((e) => e['type']).toList(), [
-      'header',
-      'task',
-      'task',
-      'header',
-      'task',
-      'header',
-      'task',
-      'task',
-      'header',
-      'task',
-      'header',
-      'task',
-    ]);
+      // Overdue header + 2 tasks (combined despite different dates), No due date
+      // header + 1 task, Today header + 2 tasks, two future headers + 1 task
+      // each (future groups by exact date)
+      expect(items.map((e) => e['type']).toList(), [
+        'header',
+        'task',
+        'task',
+        'header',
+        'task',
+        'header',
+        'task',
+        'task',
+        'header',
+        'task',
+        'header',
+        'task',
+      ]);
 
-    expect(items[0]['title'], 'Overdue');
-    expect(items[0]['category'], 'overdue');
-    expect(items[1]['title'], 'Overdue task 1');
-    expect(items[2]['title'], 'Overdue task 2');
+      expect(items[0]['title'], 'Overdue');
+      expect(items[0]['category'], 'overdue');
+      expect(items[1]['title'], 'Overdue task 1');
+      expect(items[2]['title'], 'Overdue task 2');
 
-    expect(items[3]['title'], 'No due date');
-    expect(items[3]['category'], 'noDueDate');
-    expect(items[4]['title'], 'No due date task 1');
+      expect(items[3]['title'], 'No due date');
+      expect(items[3]['category'], 'noDueDate');
+      expect(items[4]['title'], 'No due date task 1');
 
-    expect(items[5]['title'], 'Today');
-    expect(items[6]['title'], 'Today task 1');
-    expect(items[7]['title'], 'Today task 2');
+      expect(items[5]['title'], 'Today');
+      expect(items[6]['title'], 'Today task 1');
+      expect(items[7]['title'], 'Today task 2');
 
-    expect(items[8]['category'], 'future');
-    expect(items[9]['title'], 'Future task 1');
-    expect(items[10]['category'], 'future');
-    expect(items[11]['title'], 'Future task 2');
-  });
+      expect(items[8]['title'], 'Tomorrow');
+      expect(items[8]['category'], 'future');
+      expect(items[9]['title'], 'Future task 1');
+      expect(items[10]['title'], 'Tue, Jan 20');
+      expect(items[10]['category'], 'future');
+      expect(items[11]['title'], 'Future task 2');
+    },
+  );
 
   test('overdue header uses red category and other headers are not red', () {
     final now = DateTime(2026, 1, 15, 10);
@@ -261,6 +266,73 @@ void main() {
         formatTaskDate(DateTime(2026, 11, 2), DateTime(2026, 10, 26)),
         'Mon, Nov 2',
       );
+    },
+  );
+
+  test(
+    'buildWidgetDisplayItems should match home screen headers when tasks span categories',
+    () {
+      final now = DateTime(2026, 12, 31, 23, 59);
+      final tasks = [
+        Task(id: 'later', title: 'Later', due: '2027-01-02T00:00:00.000Z'),
+        Task(
+          id: 'tomorrow',
+          title: 'Next day',
+          due: '2027-01-01T00:00:00.000Z',
+        ),
+        Task(id: 'today', title: 'Now', due: '2026-12-31T00:00:00.000Z'),
+        Task(id: 'no-date', title: 'Unscheduled'),
+        Task(id: 'overdue', title: 'Late', due: '2026-12-30T00:00:00.000Z'),
+      ];
+      final headers = buildWidgetDisplayItems(
+        tasks,
+        now,
+      ).where((item) => item['type'] == 'header').toList();
+      expect(headers.map((item) => item['title']), [
+        'Overdue',
+        'No due date',
+        'Today',
+        'Tomorrow',
+        'Sat, Jan 2, 2027',
+      ]);
+      final groups = groupTasksByDueDate(tasks, now, showCompleted: false);
+      expect(
+        headers.map((item) => item['title']),
+        groups.map((group) => formatTaskGroupTitle(group.title, now)),
+      );
+      expect(headers.map((item) => item['category']), [
+        'overdue',
+        'noDueDate',
+        'today',
+        'future',
+        'future',
+      ]);
+      expect(
+        buildWidgetDisplayItems(
+          tasks,
+          now,
+        ).where((item) => item['type'] == 'task').map((item) => item['id']),
+        ['overdue', 'no-date', 'today', 'tomorrow', 'later'],
+      );
+    },
+  );
+
+  test(
+    'buildWidgetDisplayItems should show Tomorrow when dates cross a month boundary',
+    () {
+      final items = buildWidgetDisplayItems([
+        Task(id: 'next', title: 'Next month', due: '2026-02-01T00:00:00.000Z'),
+      ], DateTime(2026, 1, 31, 23));
+      expect(items.first['title'], 'Tomorrow');
+    },
+  );
+
+  test(
+    'formatTaskGroupTitle should preserve named headers when title is not a date',
+    () {
+      for (final title in ['Overdue', 'No due date', 'Today', 'Completed']) {
+        expect(formatTaskGroupTitle(title, DateTime(2026, 1, 15)), title);
+      }
     },
   );
 }
