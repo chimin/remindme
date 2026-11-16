@@ -65,5 +65,19 @@ class _ScreenshotRepository extends TasksRepository {
   ];
 
   @override
+  List<TaskList> get cachedTaskLists => [
+    TaskList(id: selectedTasklistId, title: 'My Tasks'),
+  ];
+
+  @override
+  Future<bool> hasCachedTasks(String tasklistId) async => true;
+
+  @override
+  Future<List<Task>> getCachedTasks(String tasklistId) async => tasks;
+
+  @override
+  Future<void> refreshTasks(String tasklistId) async {}
+
+  @override
   Future<List<Task>> getTasks(String tasklistId) async => tasks;
 }

@@ -26,6 +26,21 @@ class _DeletionRepository extends MockTasksRepository {
   }
 }
 
+class _StartupRepository extends MockTasksRepository {
+  final lists = Completer<List<TaskList>>();
+  final refresh = Completer<void>();
+  int refreshCalls = 0;
+
+  @override
+  Future<List<TaskList>> getTaskLists() => lists.future;
+
+  @override
+  Future<void> refreshTasks(String tasklistId) async {
+    refreshCalls++;
+    await refresh.future;
+  }
+}
+
 void main() {
   setUp(() {
     final view = TestWidgetsFlutterBinding.ensureInitialized()
@@ -36,6 +51,59 @@ void main() {
     addTearDown(view.resetPhysicalSize);
     addTearDown(view.resetDevicePixelRatio);
   });
+
+  for (final empty in [false, true]) {
+    testWidgets(
+      'startup should display the ${empty ? 'empty' : 'saved'} snapshot when network requests are pending',
+      (tester) async {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          const MethodChannel('home_widget'),
+          (_) async => true,
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            const MethodChannel('home_widget'),
+            null,
+          ),
+        );
+        final repo = _StartupRepository()
+          ..initialized = true
+          ..taskLists.add(TaskList(id: 'list-1', title: 'Saved list'))
+          ..signInMock(tasklistId: 'list-1');
+        if (!empty) repo.mockTasks.add(Task(id: 'saved', title: 'Saved task'));
+        await tester.pumpWidget(
+          ChangeNotifierProvider<TasksRepository>.value(
+            value: repo,
+            child: const MyApp(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text(empty ? 'No tasks yet' : 'Saved task'),
+          findsOneWidget,
+        );
+        expect(find.text('Saved list'), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(repo.refreshCalls, 1);
+        if (!empty) {
+          await expectLater(
+            find.byType(MaterialApp),
+            matchesGoldenFile('golden/task_home_screen_cached_startup.png'),
+          );
+        }
+        repo.lists.completeError(StateError('metadata offline'));
+        repo.populateTasks([Task(id: 'fresh', title: 'Fresh task')]);
+        await tester.pumpAndSettle();
+        expect(find.text('Fresh task'), findsOneWidget);
+        expect(find.text('Saved task'), findsNothing);
+        repo.refresh.complete();
+        await tester.pumpAndSettle();
+        expect(repo.refreshCalls, 1);
+        await tester.pumpWidget(const SizedBox());
+        repo.dispose();
+      },
+    );
+  }
 
   for (final variant in [
     'empty',

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:remindme/services/sync_service.dart';
@@ -10,6 +12,8 @@ class FakeRepo extends TasksRepository {
   final List<String> pushedUpdates = <String>[];
   final List<String> pushedDeletes = <String>[];
   bool pulled = false;
+  int pulls = 0;
+  Completer<void>? pendingPull;
 
   @override
   String? get selectedTasklistId => selectedId;
@@ -41,29 +45,70 @@ class FakeRepo extends TasksRepository {
   @override
   Future<void> pullFromRemote(String tasklistId) async {
     pulled = true;
+    pulls++;
+    await pendingPull?.future;
   }
 }
 
 void main() {
+  test(
+    'sync should share one push and pull when refresh requests overlap',
+    () async {
+      final fake = FakeRepo()..pendingPull = Completer<void>();
+      final service = SyncService(fake);
+      final first = service.sync();
+      final second = service.sync();
+      await Future<void>.delayed(Duration.zero);
+      expect(fake.pulls, 1);
+      fake.pendingPull!.complete();
+      await Future.wait([first, second]);
+      await service.sync();
+      expect(fake.pulls, 2);
+      fake.dispose();
+    },
+  );
+
+  test('sync should allow retry when a shared refresh fails', () async {
+    final fake = FakeRepo()..pendingPull = Completer<void>();
+    final service = SyncService(fake);
+    final result = expectLater(service.sync(), throwsStateError);
+    fake.pendingPull!.completeError(StateError('offline'));
+    await result;
+    fake.pendingPull = null;
+    await service.sync();
+    expect(fake.pulls, 2);
+    fake.dispose();
+  });
+
   test(
     'sync should push dirty local changes to remote then pull remote when a tasklist is selected',
     () async {
       final fake = FakeRepo()
         ..entries.addAll([
           CachedTask(
-            id: null, tasklistId: 'list-1', localId: 'loc-1',
-            title: 'New', dirty: true,
-          ),
-          CachedTask(
-            id: 'srv-1', tasklistId: 'list-1', title: 'Edit',
+            id: null,
+            tasklistId: 'list-1',
+            localId: 'loc-1',
+            title: 'New',
             dirty: true,
           ),
           CachedTask(
-            id: 'srv-2', tasklistId: 'list-1', title: 'Gone',
-            isDeleted: true, dirty: true,
+            id: 'srv-1',
+            tasklistId: 'list-1',
+            title: 'Edit',
+            dirty: true,
           ),
           CachedTask(
-            id: 'srv-3', tasklistId: 'list-1', title: 'Clean',
+            id: 'srv-2',
+            tasklistId: 'list-1',
+            title: 'Gone',
+            isDeleted: true,
+            dirty: true,
+          ),
+          CachedTask(
+            id: 'srv-3',
+            tasklistId: 'list-1',
+            title: 'Clean',
             dirty: false,
           ),
         ]);
@@ -78,35 +123,34 @@ void main() {
     },
   );
 
-  test(
-    'sync should skip entries that are not dirty',
-    () async {
-      final fake = FakeRepo()
-        ..entries.add(
-          CachedTask(id: 'srv-1', tasklistId: 'list-1', title: 'Clean', dirty: false),
-        );
+  test('sync should skip entries that are not dirty', () async {
+    final fake = FakeRepo()
+      ..entries.add(
+        CachedTask(
+          id: 'srv-1',
+          tasklistId: 'list-1',
+          title: 'Clean',
+          dirty: false,
+        ),
+      );
 
-      final service = SyncService(fake);
-      await service.sync();
+    final service = SyncService(fake);
+    await service.sync();
 
-      expect(fake.pushedCreates, isEmpty);
-      expect(fake.pushedUpdates, isEmpty);
-      expect(fake.pushedDeletes, isEmpty);
-      expect(fake.pulled, isTrue);
-    },
-  );
+    expect(fake.pushedCreates, isEmpty);
+    expect(fake.pushedUpdates, isEmpty);
+    expect(fake.pushedDeletes, isEmpty);
+    expect(fake.pulled, isTrue);
+  });
 
-  test(
-    'sync should do nothing when no tasklist is selected',
-    () async {
-      final fake = FakeRepo()..selectedId = null;
-      final service = SyncService(fake);
-      await service.sync();
+  test('sync should do nothing when no tasklist is selected', () async {
+    final fake = FakeRepo()..selectedId = null;
+    final service = SyncService(fake);
+    await service.sync();
 
-      expect(fake.pulled, isFalse);
-      expect(fake.pushedCreates, isEmpty);
-      expect(fake.pushedUpdates, isEmpty);
-      expect(fake.pushedDeletes, isEmpty);
-    },
-  );
+    expect(fake.pulled, isFalse);
+    expect(fake.pushedCreates, isEmpty);
+    expect(fake.pushedUpdates, isEmpty);
+    expect(fake.pushedDeletes, isEmpty);
+  });
 }

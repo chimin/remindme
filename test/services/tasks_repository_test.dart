@@ -74,6 +74,42 @@ void main() {
         }, () => MockClient(server.handle));
 
     test(
+      'initialize should leave the task box closed when the user is signed out',
+      () async {
+        await repo.init();
+        expect(repo.initialized, isTrue);
+        expect(repo.signedIn, isFalse);
+        expect(Hive.isBoxOpen('remindme_tasks_cache'), isFalse);
+        expect(
+          await File('${cache.path}/remindme_tasks_cache.hive').exists(),
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      'read tasks should return an empty snapshot without network when an empty list was cached',
+      () => run(() async {
+        await repo.saveCacheEntries('empty', []);
+        server.events.clear();
+        expect(await repo.hasCachedTasks('empty'), isTrue);
+        expect(await repo.getTasks('empty'), isEmpty);
+        expect(server.events, isEmpty);
+      }),
+    );
+
+    test(
+      'read cached tasks should return saved tasks when the server is offline',
+      () => run(() async {
+        server.offline = true;
+        server.events.clear();
+        final tasks = await repo.getCachedTasks('list');
+        expect(tasks.single.title, 'Water plants');
+        expect(server.events, isEmpty);
+      }),
+    );
+
+    test(
       'complete task should retain history and clone metadata when task repeats',
       () => run(() async {
         await repo.completeTask('list', 'old', true);

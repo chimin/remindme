@@ -10,6 +10,8 @@ class FakeGooglePlatform extends GoogleSignInPlatform {
   static const tokens = AuthenticationTokenData(idToken: 'id');
   final events = StreamController<AuthenticationEvent>();
   Object? initializationError;
+  Future<void>? pendingInitialization;
+  int initializationCalls = 0;
   bool requireConsent = false;
   Object? authError;
   Object? silentError;
@@ -31,7 +33,9 @@ class FakeGooglePlatform extends GoogleSignInPlatform {
   Stream<AuthenticationEvent> get authenticationEvents => events.stream;
   @override
   Future<void> init(InitParameters params) async {
+    initializationCalls++;
     if (initializationError != null) throw initializationError!;
+    await pendingInitialization;
   }
 
   @override

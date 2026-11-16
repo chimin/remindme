@@ -8,6 +8,7 @@ import 'services/auth_repository.dart';
 import 'services/tasks_repository.dart';
 import 'screens/login_screen.dart';
 import 'screens/task_home_screen.dart';
+import 'utils/log.dart';
 
 Future<void> main() => startApp();
 
@@ -18,14 +19,22 @@ Future<void> startApp({AuthRepository? authRepository}) async {
   final repo = TasksRepository(authRepository: authRepository);
   final syncService = SyncService(repo);
 
-  // Trigger a full push+pull sync on every sign-in so the local cache is up to
-  // date before the home screen is shown.
-  repo.onSignedIn = () => syncService.syncOnSignIn();
-
-  await repo.init();
-  await syncService.init();
-
+  repo.onRefreshTasks = (id) => syncService.sync(tasklistId: id);
   runApp(ChangeNotifierProvider.value(value: repo, child: const MyApp()));
+
+  // Let the loading UI paint before starting storage and platform work.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(repo.init());
+    unawaited(_initializeBackgroundSync(syncService));
+  });
+}
+
+Future<void> _initializeBackgroundSync(SyncService service) async {
+  try {
+    await service.init();
+  } catch (error, stack) {
+    logError('Unable to schedule background sync', error, stack);
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -51,7 +60,23 @@ class AuthRouter extends StatelessWidget {
   Widget build(BuildContext context) {
     final repo = context.watch<TasksRepository>();
     if (!repo.initialized) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        body: Center(
+          child: repo.initializationError == null
+              ? const CircularProgressIndicator()
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Unable to start Remind Me. Please try again.'),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: repo.init,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+        ),
+      );
     }
     if (!repo.signedIn) {
       return const LoginScreen();

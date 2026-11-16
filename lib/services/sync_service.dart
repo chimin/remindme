@@ -33,6 +33,7 @@ class SyncService {
   SyncService(this._repository);
 
   final TasksRepository _repository;
+  final Map<String, Future<void>> _inFlight = {};
 
   /// Initializes workmanager and schedules the once-per-day periodic sync.
   ///
@@ -49,22 +50,29 @@ class SyncService {
 
   /// Performs a full push (local -> remote) then pull (remote -> local) sync
   /// for the currently selected tasklist.
-  Future<void> sync() async {
-    final id = _repository.selectedTasklistId;
+  Future<void> sync({String? tasklistId}) async {
+    final id = tasklistId ?? _repository.selectedTasklistId;
     if (id == null) return;
     await _runSync(tasklistId: id);
   }
 
   /// Sync triggered on sign-in: pushes pending local changes then pulls remote
-  /// state so the cache is up to date before the home screen is shown.
+  /// state. The UI can keep displaying its saved snapshot during this work.
   Future<void> syncOnSignIn() async {
     await sync();
   }
 
-  Future<void> _runSync({String? tasklistId}) async {
+  Future<void> _runSync({String? tasklistId}) {
     final id = tasklistId ?? _repository.selectedTasklistId;
-    if (id == null) return;
+    if (id == null) return Future.value();
+    return _inFlight.putIfAbsent(id, () {
+      return _performSync(id).whenComplete(() {
+        _inFlight.remove(id);
+      });
+    });
+  }
 
+  Future<void> _performSync(String id) async {
     // --- Push: local dirty changes -> remote ---
     final entries = await _repository.getCacheEntries(id);
     for (final entry in entries) {

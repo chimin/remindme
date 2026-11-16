@@ -53,6 +53,18 @@ class MockTasksRepository extends TasksRepository {
   Future<List<TaskList>> getTaskLists() async => List<TaskList>.from(taskLists);
 
   @override
+  List<TaskList> get cachedTaskLists => List<TaskList>.from(taskLists);
+
+  @override
+  Future<bool> hasCachedTasks(String tasklistId) async => true;
+
+  @override
+  Future<List<Task>> getCachedTasks(String tasklistId) => getTasks(tasklistId);
+
+  @override
+  Future<void> refreshTasks(String tasklistId) async {}
+
+  @override
   Future<List<Task>> getTasks(String tasklistId) async =>
       List<Task>.from(mockTasks);
 

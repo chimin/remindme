@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:googleapis/tasks/v1.dart';
 import 'package:provider/provider.dart';
@@ -45,7 +47,28 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
   @override
   void initState() {
     super.initState();
+    final repo = _repository = _getRepo();
+    _taskLists = repo.cachedTaskLists;
+    repo.addListener(_repositoryChanged);
     _loadData();
+  }
+
+  TasksRepository? _repository;
+
+  void _repositoryChanged() {
+    if (mounted) {
+      unawaited(
+        _refreshTasks().catchError((Object error, StackTrace stack) {
+          logError('Unable to read cached tasks', error, stack);
+        }),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _repository?.removeListener(_repositoryChanged);
+    super.dispose();
   }
 
   List<TaskGroup> _groupTasks() {
@@ -302,12 +325,19 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     final repo = context.read<TasksRepository>();
     setState(() => _loading = true);
     try {
-      if (repo.selectedTasklistId == null) {
+      final hadSelection = repo.selectedTasklistId != null;
+      if (!hadSelection) {
         final id = await repo.resolveDefaultTasklistId();
+        if (!mounted) return;
         await repo.selectTasklist(id);
+        _taskLists = repo.cachedTaskLists;
       }
-      await _refreshLists();
+      if (!mounted) return;
       await _refreshTasks();
+      final hasSnapshot = await repo.hasCachedTasks(repo.selectedTasklistId!);
+      if (mounted) setState(() => _loading = !hasSnapshot);
+      if (hadSelection) unawaited(_refreshLists());
+      await _refreshRemoteTasks();
     } catch (e, st) {
       logError('Failed to load tasks', e, st);
       if (mounted) {
@@ -321,9 +351,37 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
   }
 
   Future<void> _refreshLists() async {
-    final lists = await context.read<TasksRepository>().getTaskLists();
-    if (mounted) {
-      setState(() => _taskLists = lists);
+    try {
+      final lists = await _getRepo().getTaskLists();
+      if (mounted) {
+        setState(() => _taskLists = lists);
+        await _refreshTasks();
+      }
+    } catch (error, stack) {
+      logError('Unable to refresh task lists', error, stack);
+    }
+  }
+
+  Future<void> _refreshRemoteTasks() async {
+    final repo = _getRepo();
+    final id = repo.selectedTasklistId;
+    if (id == null) return;
+    try {
+      await repo.refreshTasks(id);
+      if (mounted) await _refreshTasks();
+    } catch (error, stack) {
+      logError('Unable to refresh tasks', error, stack);
+      if (mounted && repo.selectedTasklistId == id) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to refresh tasks. Pull down to retry.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted && repo.selectedTasklistId == id) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -331,8 +389,8 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
     final repo = context.read<TasksRepository>();
     final id = repo.selectedTasklistId;
     if (id == null) return;
-    final tasks = await repo.getTasks(id);
-    if (mounted) {
+    final tasks = await repo.getCachedTasks(id);
+    if (mounted && repo.selectedTasklistId == id) {
       setState(() => _tasks = tasks);
       WidgetService.updateWidget(
         _tasks,
@@ -365,6 +423,7 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
   Future<void> _handleTaskListSelected(String taskListId) async {
     await _getRepo().selectTasklist(taskListId);
     await _refreshTasks();
+    await _refreshRemoteTasks();
   }
 
   Future<void> _openWidgetColorConfig() async {
@@ -571,8 +630,7 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: () async {
-                await _refreshLists();
-                await _refreshTasks();
+                await Future.wait([_refreshLists(), _refreshRemoteTasks()]);
               },
               child: hasVisibleTasks
                   ? _buildGroupedTaskList(groups: groups)

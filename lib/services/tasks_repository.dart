@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 import 'package:hive_flutter/hive_flutter.dart';
@@ -239,6 +240,12 @@ class TasksRepository extends ChangeNotifier {
   TasksApi? _tasksApi;
   Box? _cacheBox;
   bool initialized = false;
+  String? initializationError;
+  Future<void>? _initialization;
+  Future<void>? _cacheInitialization;
+  Future<void> Function(String tasklistId)? onRefreshTasks;
+  List<TaskList> _taskLists = [];
+  List<TaskList> get cachedTaskLists => List.unmodifiable(_taskLists);
   bool _disposed = false;
   bool _signingOut = false;
 
@@ -269,14 +276,51 @@ class TasksRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> init() async {
+  Future<void> init() => _initialization ??= _initialize().whenComplete(() {
+    _initialization = null;
+  });
+
+  Future<void> _initialize() async {
+    initializationError = null;
+    if (!_disposed) notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _selectedTasklistId = prefs.getString(_kPrefKey);
+      _showCompleted = prefs.getBool(_kShowCompletedPrefKey) ?? true;
+      final savedLists = prefs.getString(_kTaskListsPrefKey);
+      if (savedLists != null) {
+        try {
+          _taskLists = (jsonDecode(savedLists) as List)
+              .map(
+                (value) => TaskList.fromJson(Map<String, dynamic>.from(value)),
+              )
+              .toList();
+        } catch (error, stack) {
+          logError('Unable to read saved task lists', error, stack);
+        }
+      }
+      await _auth.init();
+      // Login has no use for the task box. Open it only for an authenticated
+      // session; all task reads/writes also guard cache readiness.
+      if (signedIn) await _ensureCache();
+      initialized = true;
+    } catch (error, stack) {
+      initializationError = 'Unable to initialize local data';
+      logError('Unable to initialize repository', error, stack);
+    }
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> _ensureCache() {
+    if (_cacheBox?.isOpen ?? false) return Future.value();
+    return _cacheInitialization ??= _openCache().whenComplete(() {
+      _cacheInitialization = null;
+    });
+  }
+
+  Future<void> _openCache() async {
     await Hive.initFlutter();
     _cacheBox = await Hive.openBox(_kCacheBox);
-    await _loadSelectedTasklist();
-    await _loadShowCompleted();
-    await _auth.init();
-    initialized = true;
-    if (!_disposed) notifyListeners();
   }
 
   Future<void> signIn() async {
@@ -294,9 +338,12 @@ class TasksRepository extends ChangeNotifier {
       try {
         // Let pending task operations finish before deleting their cached data.
         await _withTaskLock(() async {
-          await _cacheBox?.clear();
+          await _ensureCache();
+          await _cacheBox!.clear();
+          _taskLists = [];
           final prefs = await SharedPreferences.getInstance();
           await prefs.remove(_kPrefKey);
+          await prefs.remove(_kTaskListsPrefKey);
         });
       } finally {
         await WidgetService.clearWidget();
@@ -315,6 +362,7 @@ class TasksRepository extends ChangeNotifier {
     return result;
   }
 
+  static const _kTaskListsPrefKey = 'remindme_task_lists';
   static const _kPrefKey = 'remindme_tasklist_id';
   String? _selectedTasklistId;
   String? get selectedTasklistId => _selectedTasklistId;
@@ -328,23 +376,12 @@ class TasksRepository extends ChangeNotifier {
   /// this setting.
   bool get showCompleted => _showCompleted;
 
-  Future<void> _loadShowCompleted() async {
-    final prefs = await SharedPreferences.getInstance();
-    _showCompleted = prefs.getBool(_kShowCompletedPrefKey) ?? true;
-  }
-
   /// Shows or hides completed tasks on the app's task screen and persists the
   /// choice.
   Future<void> setShowCompleted(bool value) async {
     _showCompleted = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kShowCompletedPrefKey, value);
-    notifyListeners();
-  }
-
-  Future<void> _loadSelectedTasklist() async {
-    final prefs = await SharedPreferences.getInstance();
-    _selectedTasklistId = prefs.getString(_kPrefKey);
     notifyListeners();
   }
 
@@ -358,8 +395,8 @@ class TasksRepository extends ChangeNotifier {
   Future<String> resolveDefaultTasklistId() async {
     final lists = await getTaskLists();
     if (lists.isEmpty) {
-      final created = await _tasksApi!.tasklists.insert(
-        TaskList(title: 'Tasks'),
+      final created = await _api(
+        () => _tasksApi!.tasklists.insert(TaskList(title: 'Tasks')),
       );
       final id = created.id;
       if (id == null) throw StateError('Tasklist ID was null');
@@ -376,7 +413,7 @@ class TasksRepository extends ChangeNotifier {
 
   Future<T> _api<T>(Future<T> Function() fn) async {
     try {
-      return await fn();
+      return await fn().timeout(const Duration(seconds: 30));
     } on DetailedApiRequestError catch (e) {
       if (e.status == 401) {
         await _auth.invalidateSession();
@@ -385,36 +422,50 @@ class TasksRepository extends ChangeNotifier {
     }
   }
 
-  Future<List<TaskList>> getTaskLists() =>
-      _api(() => _tasksApi!.tasklists.list().then((v) => v.items ?? []));
-
-  /// Reads tasks for [tasklistId] from the local cache only (never the network).
-  ///
-  /// When the cache is empty (cold start) it is populated from the remote API.
-  /// On a warm cache the local copy is returned immediately and a background
-  /// refresh is scheduled so subsequent reads stay fresh.
-  Future<List<Task>> getTasks(String tasklistId) async {
-    final cached = await _readCacheEntries(tasklistId).then(
-      (entries) =>
-          entries.where((e) => !e.isDeleted).map((e) => e.toTask()).toList(),
+  Future<List<TaskList>> getTaskLists() async {
+    final client = _apiClient;
+    final lists = await _api(
+      () => _tasksApi!.tasklists.list().then((v) => v.items ?? <TaskList>[]),
     );
+    await _withTaskLock(() async {
+      if (_disposed || _signingOut || !identical(client, _apiClient)) return;
+      _taskLists = lists;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _kTaskListsPrefKey,
+        jsonEncode(lists.map((list) => list.toJson()).toList()),
+      );
+    });
+    return lists;
+  }
 
-    if (cached.isEmpty) {
+  /// Returns the saved snapshot, including a previously cached empty list.
+  Future<List<Task>> getCachedTasks(String tasklistId) async =>
+      (await _readCacheEntries(tasklistId))
+          .where((entry) => !entry.isDeleted)
+          .map((entry) => entry.toTask())
+          .toList();
+
+  Future<bool> hasCachedTasks(String tasklistId) async {
+    await _ensureCache();
+    return _cacheBox!.containsKey(_cacheKey(tasklistId));
+  }
+
+  /// Explicit refresh, coordinated with pending pushes by the app's SyncService.
+  Future<void> refreshTasks(String tasklistId) =>
+      onRefreshTasks?.call(tasklistId) ?? pullFromRemote(tasklistId);
+
+  /// Reads a saved snapshot, populating it remotely only on the first read.
+  /// Refreshing an existing snapshot is always explicit through [refreshTasks].
+  Future<List<Task>> getTasks(String tasklistId) async {
+    if (!await hasCachedTasks(tasklistId)) {
       try {
-        await pullFromRemote(tasklistId);
-        return (await _entries(
-          tasklistId,
-        )).where((e) => !e.isDeleted).map((e) => e.toTask()).toList();
-      } catch (_) {
-        return (await _entries(
-          tasklistId,
-        )).where((e) => !e.isDeleted).map((e) => e.toTask()).toList();
+        await refreshTasks(tasklistId);
+      } catch (error, stack) {
+        logError('Unable to load initial tasks', error, stack);
       }
     }
-
-    // ignore: unawaited_futures
-    _syncTaskList(tasklistId);
-    return cached;
+    return getCachedTasks(tasklistId);
   }
 
   /// Pulls remote tasks for [tasklistId] and merges them into the local cache
@@ -423,21 +474,13 @@ class TasksRepository extends ChangeNotifier {
       _withTaskLock(() => _pullFromRemote(tasklistId));
 
   Future<void> _pullFromRemote(String tasklistId) async {
+    final client = _apiClient;
     final remote = await _fetchRemoteTasks(tasklistId);
+    if (_disposed || _signingOut || !identical(client, _apiClient)) return;
     final cached = await _readCacheEntries(tasklistId);
     final merged = mergeTasks(cached, remote, tasklistId: tasklistId);
     await _writeCacheEntries(tasklistId, merged);
     await _reconcileRecurrence(tasklistId);
-  }
-
-  /// Pulls remote tasks for [tasklistId] and merges them into the local cache
-  /// using last-write-wins. Swallows errors so background sync never crashes.
-  Future<void> _syncTaskList(String tasklistId) async {
-    try {
-      await pullFromRemote(tasklistId);
-    } catch (e, st) {
-      logError('Background task sync failed', e, st);
-    }
   }
 
   Future<List<Task>> _fetchRemoteTasks(String tasklistId) => _api(() async {
@@ -465,6 +508,7 @@ class TasksRepository extends ChangeNotifier {
       _readCacheEntries(tasklistId);
 
   Future<List<CachedTask>> _readCacheEntries(String tasklistId) async {
+    await _ensureCache();
     final raw = _cacheBox?.get(_cacheKey(tasklistId));
     if (raw == null) return <CachedTask>[];
     final list = List<Map<String, dynamic>>.from(
@@ -477,11 +521,12 @@ class TasksRepository extends ChangeNotifier {
     String tasklistId,
     List<CachedTask> entries,
   ) async {
-    await _cacheBox?.put(
+    await _ensureCache();
+    await _cacheBox!.put(
       _cacheKey(tasklistId),
       entries.map((e) => e.toJson()).toList(),
     );
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   /// Persists [entries] to the local cache for [tasklistId] (used by SyncService).

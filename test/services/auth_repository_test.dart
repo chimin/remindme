@@ -69,6 +69,66 @@ void main() {
     }
 
     test(
+      'sign in should reuse platform initialization when startup initialization timed out',
+      () async {
+        repo.dispose();
+        repo = AuthRepository(silentTimeout: const Duration(milliseconds: 20));
+        final pending = Completer<void>();
+        platform.pendingInitialization = pending.future;
+        await repo.init();
+        expect(repo.signedIn, isFalse);
+        final retry = repo.signIn();
+        await Future<void>.delayed(Duration.zero);
+        expect(platform.initializationCalls, 1);
+        pending.complete();
+        await retry;
+        expect(platform.initializationCalls, 1);
+        expect(repo.signedIn, isTrue);
+      },
+    );
+
+    test(
+      'initialize should return to login without prompting when restored Tasks consent is missing',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'remindme_sign_in_succeeded': true,
+        });
+        platform.restoreUser = true;
+        platform.requireConsent = true;
+        await repo.init();
+        expect(repo.initialized, isTrue);
+        expect(repo.signedIn, isFalse);
+        expect(repo.authError, isNotNull);
+        expect(await savedSuccess(), isFalse);
+        await repo.signIn();
+        expect(repo.signedIn, isTrue);
+      },
+    );
+
+    test(
+      'initialize should reject late credentials when silent authorization times out',
+      () async {
+        repo.dispose();
+        repo = AuthRepository(silentTimeout: const Duration(milliseconds: 20));
+        SharedPreferences.setMockInitialValues({
+          'remindme_sign_in_succeeded': true,
+        });
+        platform.restoreUser = true;
+        final pending = Completer<ClientAuthorizationTokenData?>();
+        platform.pendingPermission = pending.future;
+        await repo.init();
+        expect(repo.initialized, isTrue);
+        expect(repo.signedIn, isFalse);
+        pending.complete(
+          const ClientAuthorizationTokenData(accessToken: 'late'),
+        );
+        await settleAuthentication();
+        expect(repo.signedIn, isFalse);
+        expect(await savedSuccess(), isFalse);
+      },
+    );
+
+    test(
       'initialize should clear leftover sessions when no successful sign in was saved',
       () async {
         platform.restoreUser = true;
