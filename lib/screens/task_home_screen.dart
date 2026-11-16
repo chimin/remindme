@@ -12,6 +12,7 @@ import '../services/widget_service.dart';
 import '../utils/log.dart';
 import '../utils/task_grouping.dart';
 import '../widgets/trailing_checked_menu_item.dart';
+import '../widgets/delete_task_confirmation_dialog.dart';
 import 'task_edit_screen.dart';
 import 'widget_color_config_dialog.dart';
 
@@ -242,7 +243,16 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
               return Dismissible(
                 key: Key(task.id ?? 'task-${task.title.hashCode}'),
                 direction: DismissDirection.endToStart,
-                confirmDismiss: (_) async => task.id != null,
+                confirmDismiss: (_) async {
+                  if (task.id == null || selectedId == null) return false;
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => DeleteTaskConfirmationDialog(
+                      taskTitle: task.title ?? '',
+                    ),
+                  );
+                  return confirmed == true && mounted;
+                },
                 onDismissed: (_) async {
                   if (task.id == null || selectedId == null) return;
                   await _getRepo().deleteTask(selectedId, task.id!);

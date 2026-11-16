@@ -1,5 +1,6 @@
 import 'package:remindme/main.dart';
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -92,6 +93,158 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  Future<RecordingTasksRepository> openDeleteEditor(WidgetTester tester) async {
+    final repo = RecordingTasksRepository();
+    await tester.pumpWidget(
+      ChangeNotifierProvider<TasksRepository>.value(
+        value: repo,
+        child: RepaintBoundary(
+          key: const ValueKey('delete-editor-screen'),
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => TaskEditScreen(
+                        taskListId: 'list-1',
+                        task: Task(
+                          id: 'task-1',
+                          title: 'Water plants',
+                          notes: 'Keep soil moist',
+                        ),
+                      ),
+                    ),
+                  ),
+                  child: const Text('Open editor'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open editor'));
+    await tester.pumpAndSettle();
+    return repo;
+  }
+
+  Future<void> openDeleteDialog(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('Delete task'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'delete task should show confirmation when the delete button is tapped',
+    (tester) async {
+      final repo = await openDeleteEditor(tester);
+      await openDeleteDialog(tester);
+      expect(find.text('Delete task?'), findsOneWidget);
+      expect(repo.deleted, isEmpty);
+      await expectLater(
+        find.byKey(const ValueKey('delete-editor-screen')),
+        matchesGoldenFile('golden/task_edit_screen_delete_confirmation.png'),
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'delete task should retain the editor when confirmation is cancelled',
+    (tester) async {
+      final repo = await openDeleteEditor(tester);
+      await tester.enterText(
+        find.byKey(const ValueKey('task_title')),
+        'Changed title',
+      );
+      await openDeleteDialog(tester);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit task'), findsOneWidget);
+      expect(find.text('Changed title'), findsOneWidget);
+      expect(find.text('Keep soil moist'), findsOneWidget);
+      expect(repo.deleted, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'delete task should return to the previous screen when deletion is confirmed',
+    (tester) async {
+      final repo = await openDeleteEditor(tester);
+      await openDeleteDialog(tester);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(repo.deleted, [('list-1', 'task-1')]);
+      expect(find.text('Open editor'), findsOneWidget);
+      expect(find.text('Edit task'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'delete task should disable save and delete actions when deletion is pending',
+    (tester) async {
+      final repo = await openDeleteEditor(tester);
+      repo.pendingDeletion = Completer<void>();
+      await openDeleteDialog(tester);
+      await tester.tap(find.text('Delete'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton && widget.tooltip == 'Delete task',
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull,
+      );
+      expect(repo.deleted, [('list-1', 'task-1')]);
+      repo.pendingDeletion!.complete();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'delete task should show an error and retain the editor when deletion fails',
+    (tester) async {
+      final repo = await openDeleteEditor(tester);
+      repo.deletionError = StateError('offline');
+      await openDeleteDialog(tester);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit task'), findsOneWidget);
+      expect(
+        find.text('Failed to delete task: Bad state: offline'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton && widget.tooltip == 'Delete task',
+              ),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNotNull,
+      );
+      expect(repo.deleted, [('list-1', 'task-1')]);
+    },
+  );
 
   testWidgets(
     'save should preserve extensible metadata when a repeating task is edited',
@@ -263,6 +416,16 @@ void main() {
 
 class RecordingTasksRepository extends MockTasksRepository {
   Task? saved;
+  final deleted = <(String, String)>[];
+  Completer<void>? pendingDeletion;
+  Object? deletionError;
+
+  @override
+  Future<void> deleteTask(String tasklistId, String taskId) async {
+    deleted.add((tasklistId, taskId));
+    if (deletionError != null) throw deletionError!;
+    if (pendingDeletion != null) await pendingDeletion!.future;
+  }
 
   @override
   Future<Task> createTask(

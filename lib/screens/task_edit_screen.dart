@@ -6,6 +6,7 @@ import '../services/tasks_repository.dart';
 import '../models/task_metadata.dart';
 import '../utils/log.dart';
 import '../utils/task_grouping.dart';
+import '../widgets/delete_task_confirmation_dialog.dart';
 
 class TaskEditScreen extends StatefulWidget {
   final String taskListId;
@@ -116,7 +117,14 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
   }
 
   Future<void> _delete() async {
-    if (!_isEditing) return;
+    if (!_isEditing || _saving || widget.task!.id == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) =>
+          DeleteTaskConfirmationDialog(taskTitle: widget.task!.title ?? ''),
+    );
+    if (confirmed != true || !mounted || _saving) return;
+    setState(() => _saving = true);
     try {
       final repo = context.read<TasksRepository>();
       await repo.deleteTask(widget.taskListId, widget.task!.id!);
@@ -128,6 +136,8 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text('Failed to delete task: $e')));
       }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 

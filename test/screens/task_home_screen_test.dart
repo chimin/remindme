@@ -26,6 +26,16 @@ class _DeletionRepository extends MockTasksRepository {
   }
 }
 
+class _SingleDeletionRepository extends MockTasksRepository {
+  final deleted = <(String, String)>[];
+
+  @override
+  Future<void> deleteTask(String tasklistId, String taskId) async {
+    deleted.add((tasklistId, taskId));
+    mockTasks.removeWhere((task) => task.id == taskId);
+  }
+}
+
 class _StartupRepository extends MockTasksRepository {
   final lists = Completer<List<TaskList>>();
   final refresh = Completer<void>();
@@ -51,6 +61,76 @@ void main() {
     addTearDown(view.resetPhysicalSize);
     addTearDown(view.resetDevicePixelRatio);
   });
+
+  Future<_SingleDeletionRepository> swipeTask(WidgetTester tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('home_widget'),
+      (_) async => null,
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('home_widget'),
+        null,
+      ),
+    );
+    final repo = _SingleDeletionRepository()
+      ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
+      ..mockTasks.add(Task(id: 'task-1', title: 'Water plants'))
+      ..signInMock(tasklistId: 'list-1');
+    await tester.pumpWidget(
+      ChangeNotifierProvider<TasksRepository>.value(
+        value: repo,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: createAppTheme(),
+          home: const TaskHomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byKey(const Key('task-1')), const Offset(-400, 0));
+    await tester.pumpAndSettle();
+    return repo;
+  }
+
+  testWidgets('swipe delete should show confirmation when a task is swiped', (
+    tester,
+  ) async {
+    final repo = await swipeTask(tester);
+    expect(find.text('Delete task?'), findsOneWidget);
+    expect(repo.deleted, isEmpty);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('golden/task_home_screen_delete_confirmation.png'),
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+    'swipe delete should retain the task when confirmation is cancelled',
+    (tester) async {
+      final repo = await swipeTask(tester);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(repo.deleted, isEmpty);
+      expect(find.text('Water plants'), findsOneWidget);
+      expect(repo.mockTasks, hasLength(1));
+      expect(tester.getTopLeft(find.byKey(const Key('task-1'))).dx, 16);
+    },
+  );
+
+  testWidgets(
+    'swipe delete should remove the task when deletion is confirmed',
+    (tester) async {
+      final repo = await swipeTask(tester);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(repo.deleted, [('list-1', 'task-1')]);
+      expect(find.text('Water plants'), findsNothing);
+      expect(repo.mockTasks, isEmpty);
+    },
+  );
 
   for (final empty in [false, true]) {
     testWidgets(
