@@ -17,7 +17,7 @@ Requires an unlocked English Android 10+ emulator with Google Play services.
 Physical devices are refused.
 Add the dedicated test account and revoke Remind Me consent before each run.
 The launcher clears ALL local Remind Me data on the selected device.
-Every run records the entire flow to golden/<run-id>/test.mp4.
+Every run replaces numbered screenshots and golden/test.mp4 at stable paths.
 ''';
 
 Future<void> main(List<String> arguments) async {
@@ -192,8 +192,8 @@ Future<void> main(List<String> arguments) async {
       throw StateError('App data reset did not succeed: $cleared');
     }
 
-    final output = Directory('patrol_test/golden/$runId')
-      ..createSync(recursive: true);
+    final output = Directory('patrol_test/golden');
+    preparePatrolArtifacts(output);
     final recording = PatrolVideoRecorder(
       adb: adb,
       device: device,
@@ -286,6 +286,26 @@ Future<void> main(List<String> arguments) async {
   }
 }
 
+/// Replaces only this launcher's artifacts before a new test attempt.
+/// Unreached checkpoints must not look like screenshots from the current run.
+void preparePatrolArtifacts(Directory output) {
+  output.createSync(recursive: true);
+  final screenshot = RegExp(r'^\d{2}_[a-z0-9_]+\.png$');
+  const diagnostics = {
+    'test.mp4',
+    'recording.txt',
+    'instrumentation.txt',
+    'device.log',
+  };
+  for (final entry in output.listSync(followLinks: false)) {
+    if (entry is! File) continue;
+    final name = entry.uri.pathSegments.last;
+    if (screenshot.hasMatch(name) || diagnostics.contains(name)) {
+      entry.deleteSync();
+    }
+  }
+}
+
 /// Can also recover screenshots after an interrupted artifact pull, without
 /// starting instrumentation or rerunning the test.
 Future<void> collectPatrolScreenshots(
@@ -295,23 +315,37 @@ Future<void> collectPatrolScreenshots(
   bool stopAfterHome = false,
 }) async {
   if (!RegExp(r'^\d+$').hasMatch(runId)) throw ArgumentError('Invalid run ID.');
-  // Pull each current-run file directly into the flat golden directory. Native
-  // JUnit method names produce nested paths exceeding Windows path limits.
+  // Native filenames include a timestamp and run ID. Keep those on-device to
+  // reject stale captures, but use fixed numbered filenames for Git history.
   const remoteRoot = '/sdcard/Download/screenshots/$_testClass';
   final listing = await onDevice(['shell', 'find', remoteRoot, '-type', 'f']);
-  final captured = <String>{};
+  final pattern = RegExp(
+    r'^(?:(\d+)_)?' + RegExp.escape(runId) + r'_(\d{2}_[a-z0-9_]+)\.png$',
+  );
+  final latest = <String, ({String remote, int timestamp})>{};
   for (final remote in const LineSplitter().convert(listing)) {
-    final name = remote.split('/').last;
-    if (remote.startsWith('$remoteRoot/') &&
-        name.contains('${runId}_') &&
-        RegExp(r'^[A-Za-z0-9._-]+\.png$').hasMatch(name)) {
-      final local = File('${output.path}/$name');
-      await onDevice(['pull', remote, local.absolute.path]);
-      if (!local.existsSync() || local.lengthSync() == 0) {
-        throw StateError('Empty screenshot: $name');
-      }
-      captured.add(name);
+    if (!remote.startsWith('$remoteRoot/')) continue;
+    final match = pattern.firstMatch(remote.split('/').last);
+    if (match == null) continue;
+    final point = match.group(2)!;
+    final timestamp = int.tryParse(match.group(1) ?? '') ?? 0;
+    final previous = latest[point];
+    if (previous == null ||
+        timestamp > previous.timestamp ||
+        (timestamp == previous.timestamp &&
+            remote.compareTo(previous.remote) > 0)) {
+      latest[point] = (remote: remote, timestamp: timestamp);
     }
+  }
+  final captured = <String>{};
+  final points = latest.keys.toList()..sort();
+  for (final point in points) {
+    final local = File('${output.path}/$point.png');
+    await onDevice(['pull', latest[point]!.remote, local.absolute.path]);
+    if (!local.existsSync() || local.lengthSync() == 0) {
+      throw StateError('Empty screenshot: $point.png');
+    }
+    captured.add(point);
   }
   if (captured.isEmpty) {
     throw StateError('No screenshots were collected for $runId.');
@@ -322,20 +356,20 @@ Future<void> collectPatrolScreenshots(
       RegExp(r'OK \(1 test\)').hasMatch(log.readAsStringSync())) {
     for (final point in [
       '01_login',
-      '02_tasks_consent',
-      '03_home',
+      '04_tasks_consent',
+      '06_home',
       if (!stopAfterHome) ...[
-        '04a_new_task_form',
-        '04_created',
-        '05a_edited_task_form',
-        '05_edited',
-        '06a_before_delete',
-        '06_deleted',
-        '07_sign_out_confirmation',
-        '08_signed_out',
+        '07_new_task_form',
+        '08_created',
+        '09_edited_task_form',
+        '10_edited',
+        '11_before_delete',
+        '12_deleted',
+        '13_sign_out_confirmation',
+        '14_signed_out',
       ],
     ]) {
-      if (!captured.any((name) => name.contains('${runId}_$point'))) {
+      if (!captured.contains(point)) {
         throw StateError('Required screenshot missing: $point');
       }
     }

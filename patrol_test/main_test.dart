@@ -78,7 +78,7 @@ void main() {
         );
         listId = repo.selectedTasklistId!;
         api = google.TasksApi(auth.client!);
-        await _capture($, '03_home');
+        await _capture($, '06_home');
 
         if (_stopAfterHome) {
           $.log('Sign-in verification reached the loaded home screen.');
@@ -89,7 +89,7 @@ void main() {
         await $(#task_title).enterText(title);
         await $(#task_notes).enterText(notes);
         await _expectEditor($, title: title, notes: notes);
-        await _capture($, '04a_new_task_form');
+        await _capture($, '07_new_task_form');
         createAttempted = true;
         await $(find.text('Create task')).scrollTo().tap();
         await _waitFor(
@@ -109,14 +109,14 @@ void main() {
           return matches.single;
         }, 'Created task must exist in Google Tasks');
         taskId = created.id!;
-        await _capture($, '04_created');
+        await _capture($, '08_created');
 
         await $(find.text(title)).scrollTo().tap();
         await _expectEditor($, title: title, notes: notes);
         await $(#task_title).enterText(editedTitle);
         await $(#task_notes).enterText(editedNotes);
         await _expectEditor($, title: editedTitle, notes: editedNotes);
-        await _capture($, '05a_edited_task_form');
+        await _capture($, '09_edited_task_form');
         await $(find.text('Save changes')).scrollTo().tap();
         await _waitFor(
           $,
@@ -133,11 +133,11 @@ void main() {
               : null;
         }, 'Edited title and notes on the same remote task');
         expect(find.text(title), findsNothing);
-        await _capture($, '05_edited');
+        await _capture($, '10_edited');
 
         await $(find.text(editedTitle)).scrollTo().tap();
         await _expectEditor($, title: editedTitle, notes: editedNotes);
-        await _capture($, '06a_before_delete');
+        await _capture($, '11_before_delete');
         await $(find.byTooltip('Delete task')).tap();
         await _waitFor(
           $,
@@ -152,11 +152,11 @@ void main() {
         }, 'Deleted task absent from Google Tasks');
         deleted = true;
         expect(find.text(title), findsNothing);
-        await _capture($, '06_deleted');
+        await _capture($, '12_deleted');
 
         await $(find.byTooltip('Menu')).tap();
         await $(find.text('Sign out')).tap();
-        await _capture($, '07_sign_out_confirmation');
+        await _capture($, '13_sign_out_confirmation');
         await $(find.widgetWithText(TextButton, 'Sign out')).tap();
         await _waitFor(
           $,
@@ -168,7 +168,7 @@ void main() {
         );
         expect(repo.selectedTasklistId, isNull);
         expect(find.text('Continue with Google'), findsOneWidget);
-        await _capture($, '08_signed_out');
+        await _capture($, '14_signed_out');
       } catch (_) {
         // Capture before cleanup changes the failing screen.
         try {
@@ -381,7 +381,7 @@ Future<void> _grantFreshTasksConsent(
       );
     }
     if (unverifiedWarning && !warningCaptured) {
-      await _capture($, '02a_development_warning', settle: false);
+      await _capture($, '02_development_warning', settle: false);
       warningCaptured = true;
     }
     if (_allowUnverifiedApp && warningCaptured && !followedDevelopmentLink) {
@@ -392,7 +392,7 @@ Future<void> _grantFreshTasksConsent(
         ).hasMatch(_nativeLabel(view)),
       );
       if (developmentLinks.isNotEmpty) {
-        await _capture($, '02b_development_confirmation', settle: false);
+        await _capture($, '03_development_confirmation', settle: false);
         await _tapGoogleView($, developmentLinks.first);
         followedDevelopmentLink = true;
         screenClock.reset();
@@ -438,7 +438,7 @@ Future<void> _grantFreshTasksConsent(
       ).hasMatch('${view.text ?? ''} ${view.contentDescription ?? ''}'),
     );
     if (tasksPermission && !sawTasks) {
-      await _capture($, '02_tasks_consent', settle: false);
+      await _capture($, '04_tasks_consent', settle: false);
       sawTasks = true;
     }
     if (sawTasks && tasksPermission) {
@@ -472,7 +472,7 @@ Future<void> _grantFreshTasksConsent(
     if (buttons.isNotEmpty) {
       final button = buttons.first;
       if (sawTasks) {
-        await _capture($, '02c_tasks_confirmation', settle: false);
+        await _capture($, '05_tasks_confirmation', settle: false);
       }
       await _tapGoogleView($, button);
       screenClock.reset();

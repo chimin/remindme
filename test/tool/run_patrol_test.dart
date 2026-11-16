@@ -1,0 +1,193 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../tool/run_patrol.dart';
+
+const _remoteRoot =
+    '/sdcard/Download/screenshots/chimin.remindme.PatrolMainTest';
+
+class _ScreenshotDevice {
+  _ScreenshotDevice(this.files);
+
+  final List<String> files;
+  final List<String> pulled = [];
+  bool empty = false;
+
+  Future<String> run(
+    List<String> arguments, {
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    if (arguments.first == 'shell') return files.join('\n');
+    expect(arguments.first, 'pull');
+    pulled.add(arguments[1]);
+    await File(arguments[2]).writeAsString(empty ? '' : arguments[1]);
+    return '';
+  }
+}
+
+void main() {
+  late Directory output;
+
+  setUp(() async {
+    output = await Directory.systemTemp.createTemp(
+      'remindme_patrol_artifacts_',
+    );
+  });
+
+  tearDown(() async {
+    expect(
+      output.absolute.path,
+      startsWith(Directory.systemTemp.absolute.path),
+    );
+    await output.delete(recursive: true);
+  });
+
+  test(
+    'prepare artifacts should remove stale captures when a new test attempt starts',
+    () async {
+      for (final name in [
+        '01_login.png',
+        '02_development_warning.png',
+        '14_signed_out.png',
+        '99_failure.png',
+        'test.mp4',
+        'instrumentation.txt',
+        'device.log',
+        'recording.txt',
+        'notes.txt',
+        'reference.png',
+      ]) {
+        await File('${output.path}/$name').writeAsString('previous run');
+      }
+      final history = Directory('${output.path}/123')..createSync();
+      await File('${history.path}/test.mp4').writeAsString('history');
+
+      preparePatrolArtifacts(output);
+
+      final remaining = output
+          .listSync()
+          .map(
+            (entry) =>
+                entry.uri.pathSegments.where((part) => part.isNotEmpty).last,
+          )
+          .toSet();
+      expect(remaining, {'123', 'notes.txt', 'reference.png'});
+      expect(await File('${history.path}/test.mp4').readAsString(), 'history');
+    },
+  );
+
+  test(
+    'collect screenshots should reuse numbered filenames when native captures repeat or include other runs',
+    () async {
+      final device = _ScreenshotDevice([
+        '$_remoteRoot/nested/1000_42_01_login.png',
+        '$_remoteRoot/nested/900_42_01_login.png',
+        '$_remoteRoot/nested/1100_442_01_login.png',
+        '/somewhere/1200_42_01_login.png',
+        '$_remoteRoot/nested/1100_42_04_tasks_consent.png',
+        '$_remoteRoot/nested/1200_42_99_failure.png',
+      ]);
+      await File('${output.path}/01_login.png').writeAsString('old login');
+
+      await collectPatrolScreenshots(device.run, output, '42');
+
+      expect(
+        output.listSync().map((file) => file.uri.pathSegments.last).toSet(),
+        {'01_login.png', '04_tasks_consent.png', '99_failure.png'},
+      );
+      expect(
+        await File('${output.path}/01_login.png').readAsString(),
+        endsWith('1000_42_01_login.png'),
+      );
+      expect(device.pulled, [
+        '$_remoteRoot/nested/1000_42_01_login.png',
+        '$_remoteRoot/nested/1100_42_04_tasks_consent.png',
+        '$_remoteRoot/nested/1200_42_99_failure.png',
+      ]);
+    },
+  );
+
+  test(
+    'collect screenshots should require all lifecycle checkpoints when instrumentation passes',
+    () async {
+      await File(
+        '${output.path}/instrumentation.txt',
+      ).writeAsString('OK (1 test)');
+      final device = _ScreenshotDevice(['$_remoteRoot/1000_42_01_login.png']);
+
+      await expectLater(
+        collectPatrolScreenshots(device.run, output, '42'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('04_tasks_consent'),
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'collect screenshots should accept only sign-in checkpoints when the sign-in check passes',
+    () async {
+      await File(
+        '${output.path}/instrumentation.txt',
+      ).writeAsString('OK (1 test)');
+      final device = _ScreenshotDevice([
+        for (final point in ['06_home', '01_login', '04_tasks_consent'])
+          '$_remoteRoot/1000_42_$point.png',
+      ]);
+
+      await collectPatrolScreenshots(
+        device.run,
+        output,
+        '42',
+        stopAfterHome: true,
+      );
+
+      expect(device.pulled, hasLength(3));
+      expect(await File('${output.path}/06_home.png').exists(), isTrue);
+      expect(await File('${output.path}/14_signed_out.png').exists(), isFalse);
+    },
+  );
+
+  test(
+    'collect screenshots should reject stale runs when no current screenshots exist',
+    () async {
+      final device = _ScreenshotDevice(['$_remoteRoot/1000_442_01_login.png']);
+
+      await expectLater(
+        collectPatrolScreenshots(device.run, output, '42'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('No screenshots'),
+          ),
+        ),
+      );
+      expect(device.pulled, isEmpty);
+    },
+  );
+
+  test(
+    'collect screenshots should reject an empty file when artifact transfer fails',
+    () async {
+      final device = _ScreenshotDevice(['$_remoteRoot/1000_42_01_login.png'])
+        ..empty = true;
+
+      await expectLater(
+        collectPatrolScreenshots(device.run, output, '42'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('Empty screenshot'),
+          ),
+        ),
+      );
+    },
+  );
+}

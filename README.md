@@ -118,7 +118,7 @@ Run it only when E2E execution is explicitly requested.
 2. Enable the Tasks API, register this app's package and signing certificate,
    and add the account to the OAuth consent screen's test users if applicable.
    Keep the existing `secrets/build.keystore` and `secrets/build.json` configured
-   as described above. Do not commit credentials or screenshots.
+   as described above. Do not commit credentials; the E2E screenshots and video use versionable paths.
 3. In the test account, open
    [Google Account connections](https://myaccount.google.com/connections), select
    the OAuth application used by Remind Me, and remove its access/connection.
@@ -186,18 +186,46 @@ exit code for reset, test, screenshot, or video-recording/collection failures.
 
 ### Screenshots, video, and failures
 
-Native screenshots (including Google's UI) and the instrumentation log are
-collected into `patrol_test/golden/<run ID>/`, next to the test file. Captures
-cover initial login, Tasks consent before granting, loaded home, the filled
-new-task form, created task, edited form and saved task, the reopened task before
-deletion, deletion result, sign-out confirmation, and final login. A failure
-capture is attempted before cleanup changes the screen. These are review
-artifacts, not pixel-comparison golden tests, and are ignored by Git.
+Native screenshots (including Google's UI) and the continuous video always use
+**the same paths** in `patrol_test/golden/`, next to the test file:
 
-Every explicit run also records one continuous **`test.mp4`** in the same run
-directory. Recording starts before instrumentation launches the app and stops
-after the test and its cleanup return, so it includes the native Google screens
-and the full requested task lifecycle. The launcher waits for recording startup,
+```text
+01_login.png
+02_development_warning.png
+03_development_confirmation.png
+04_tasks_consent.png
+05_tasks_confirmation.png
+06_home.png
+07_new_task_form.png
+08_created.png
+09_edited_task_form.png
+10_edited.png
+11_before_delete.png
+12_deleted.png
+13_sign_out_confirmation.png
+14_signed_out.png
+99_failure.png
+test.mp4
+```
+
+Each checkpoint keeps its sequence number across runs. Development warning
+captures are optional; `99_failure.png` is attempted if the test fails. These
+PNGs and the MP4 are available to Git, so committing successive runs records
+changes to the same files. Logs and older timestamped directories stay ignored.
+These are review artifacts, not pixel-comparison golden tests.
+
+Before recording starts, the launcher removes only its previous numbered PNGs,
+video, and diagnostic logs. A failed or sign-in-only run therefore cannot retain
+unreached checkpoints from an older full lifecycle. Other files and historical
+subdirectories are preserved. Build/preflight failures leave existing captures
+untouched. On-device captures and test task data still use a unique run ID to
+avoid collecting stale screenshots or colliding with another test task. Repeated
+captures of the same checkpoint use the latest timestamp.
+
+Every explicit run records one continuous **`test.mp4`**, overwriting the previous
+video. Recording starts before instrumentation launches the app and stops after
+the test and its cleanup return, so it includes the native Google screens and
+the full requested task lifecycle. The launcher waits for recording startup,
 stops only its own encoder process with SIGINT to finalize the MP4, and validates
 that the local file contains media data and its finalized index. It preserves
 partial video on failure when available, and reports an early recorder exit as
