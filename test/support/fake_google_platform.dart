@@ -22,6 +22,7 @@ class FakeGooglePlatform extends GoogleSignInPlatform {
   int silentAttempts = 0;
   int manualAttempts = 0;
   int signOutCalls = 0;
+  final operations = <String>[];
   int disconnectCalls = 0;
   int blockSignOutAfter = 0;
   Future<void>? pendingSignOut;
@@ -60,6 +61,7 @@ class FakeGooglePlatform extends GoogleSignInPlatform {
     AuthenticateParameters params,
   ) async {
     manualAttempts++;
+    operations.add('authenticate');
     if (authError != null) throw authError!;
     return const AuthenticationResults(
       user: user,
@@ -94,6 +96,7 @@ class FakeGooglePlatform extends GoogleSignInPlatform {
   @override
   Future<void> signOut(SignOutParams params) async {
     signOutCalls++;
+    operations.add('signOut');
     events.add(AuthenticationEventSignOut());
     if (signOutError != null) throw signOutError!;
     if (pendingSignOut != null && signOutCalls > blockSignOutAfter) {

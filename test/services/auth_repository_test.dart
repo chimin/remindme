@@ -272,6 +272,176 @@ void main() {
     );
 
     test(
+      'sign in should clear prior credentials when preflight Google cleanup fails',
+      () async {
+        await repo.signIn();
+        expect(repo.signedIn, isTrue);
+        platform.signOutError = StateError('cleanup failed');
+        await repo.signIn();
+        expect(repo.signedIn, isFalse);
+        expect(repo.client, isNull);
+        expect(repo.userEmail, isNull);
+        expect(repo.userDisplayName, isNull);
+        expect(repo.userPhoto, isNull);
+        expect(repo.signingIn, isFalse);
+        expect(await savedSuccess(), isFalse);
+        expect(platform.operations, ['signOut', 'authenticate', 'signOut']);
+        platform.signOutError = null;
+        await repo.signIn();
+        expect(repo.signedIn, isTrue);
+        expect(repo.authError, isNull);
+        expect(platform.operations, [
+          'signOut',
+          'authenticate',
+          'signOut',
+          'signOut',
+          'authenticate',
+        ]);
+      },
+    );
+
+    test(
+      'sign in should wait for Google cleanup when it exceeds the silent authentication timeout',
+      () async {
+        repo.dispose();
+        repo = AuthRepository(
+          silentTimeout: const Duration(milliseconds: 20),
+          sessionCleanupTimeout: const Duration(seconds: 1),
+        );
+        final pending = Completer<void>();
+        platform.pendingSignOut = pending.future;
+        final attempt = repo.signIn();
+        await platform.cleanupStarted.future;
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+        expect(repo.signingIn, isTrue);
+        expect(repo.authError, isNull);
+        expect(platform.manualAttempts, 0);
+        expect(platform.signOutCalls, 1);
+        pending.complete();
+        await attempt;
+        expect(repo.signedIn, isTrue);
+        expect(await savedSuccess(), isTrue);
+      },
+    );
+
+    test(
+      'sign in should reuse native cleanup when a timed out preflight is retried',
+      () async {
+        repo.dispose();
+        repo = AuthRepository(
+          sessionCleanupTimeout: const Duration(milliseconds: 50),
+        );
+        final pending = Completer<void>();
+        platform.pendingSignOut = pending.future;
+        await repo.signIn();
+        expect(repo.signedIn, isFalse);
+        expect(repo.signingIn, isFalse);
+        expect(repo.authError, isNotNull);
+        expect(await savedSuccess(), isFalse);
+        expect(platform.operations, ['signOut']);
+        emitSignIn();
+        await settleAuthentication();
+        expect(repo.signedIn, isFalse);
+        final retry = repo.signIn();
+        await Future<void>.delayed(Duration.zero);
+        expect(repo.signingIn, isTrue);
+        expect(platform.operations, ['signOut']);
+        // Delayed SDK sign-out events must not invalidate the retry.
+        platform.events.add(AuthenticationEventSignOut());
+        pending.complete();
+        await retry;
+        expect(repo.signedIn, isTrue);
+        expect(repo.signingIn, isFalse);
+        expect(repo.authError, isNull);
+        expect(await savedSuccess(), isTrue);
+        expect(platform.operations, ['signOut', 'authenticate']);
+      },
+    );
+
+    test(
+      'sign in should reuse recovery cleanup when authentication failed before cleanup timed out',
+      () async {
+        repo.dispose();
+        repo = AuthRepository(
+          sessionCleanupTimeout: const Duration(milliseconds: 50),
+        );
+        final pending = Completer<void>();
+        platform.pendingSignOut = pending.future;
+        platform.blockSignOutAfter = 1;
+        platform.authError = StateError('offline');
+        await repo.signIn();
+        expect(repo.signedIn, isFalse);
+        expect(repo.client, isNull);
+        expect(repo.signingIn, isFalse);
+        expect(await savedSuccess(), isFalse);
+        expect(platform.operations, ['signOut', 'authenticate', 'signOut']);
+        emitSignIn();
+        await settleAuthentication();
+        expect(repo.signedIn, isFalse);
+        platform.authError = null;
+        final retry = repo.signIn();
+        await Future<void>.delayed(Duration.zero);
+        expect(platform.signOutCalls, 2);
+        expect(platform.manualAttempts, 1);
+        pending.complete();
+        await retry;
+        expect(repo.signedIn, isTrue);
+        expect(platform.operations, [
+          'signOut',
+          'authenticate',
+          'signOut',
+          'authenticate',
+        ]);
+      },
+    );
+
+    test(
+      'sign in should retry cleanup when an earlier native operation fails after its timeout',
+      () async {
+        repo.dispose();
+        repo = AuthRepository(
+          sessionCleanupTimeout: const Duration(milliseconds: 50),
+        );
+        final pending = Completer<void>();
+        platform.pendingSignOut = pending.future;
+        await repo.signIn();
+        expect(platform.manualAttempts, 0);
+        pending.completeError(StateError('late native failure'));
+        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+        expect(repo.signedIn, isFalse);
+        expect(await savedSuccess(), isFalse);
+        platform.pendingSignOut = null;
+        await repo.signIn();
+        expect(repo.signedIn, isTrue);
+        expect(platform.operations, ['signOut', 'signOut', 'authenticate']);
+      },
+    );
+
+    test(
+      'initialize should retain pending cleanup when sign in follows a startup cleanup timeout',
+      () async {
+        repo.dispose();
+        repo = AuthRepository(
+          sessionCleanupTimeout: const Duration(milliseconds: 50),
+        );
+        final pending = Completer<void>();
+        platform.pendingSignOut = pending.future;
+        await repo.init();
+        expect(repo.initialized, isTrue);
+        expect(repo.signedIn, isFalse);
+        expect(await savedSuccess(), isFalse);
+        final retry = repo.signIn();
+        await Future<void>.delayed(Duration.zero);
+        expect(platform.operations, ['signOut']);
+        pending.complete();
+        await retry;
+        expect(repo.signedIn, isTrue);
+        expect(platform.operations, ['signOut', 'authenticate']);
+      },
+    );
+
+    test(
       'sign in should keep restoration disabled when Google cleanup fails',
       () async {
         platform.signOutError = StateError('cleanup failed');

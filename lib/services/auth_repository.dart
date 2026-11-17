@@ -12,9 +12,15 @@ import '../utils/log.dart';
 
 /// Owns Google authentication, Tasks authorization, and saved-session recovery.
 class AuthRepository extends ChangeNotifier {
-  AuthRepository({this.silentTimeout = const Duration(seconds: 10)});
+  AuthRepository({
+    this.silentTimeout = const Duration(seconds: 10),
+    this.sessionCleanupTimeout = const Duration(seconds: 30),
+  });
 
   final Duration silentTimeout;
+
+  /// Native Credential Manager cleanup can outlive silent authentication.
+  final Duration sessionCleanupTimeout;
   final GoogleSignIn _signIn = GoogleSignIn.instance;
   StreamSubscription<GoogleSignInAuthenticationEvent>? _sub;
   GoogleSignInAccount? _currentUser;
@@ -42,6 +48,7 @@ class AuthRepository extends ChangeNotifier {
   static const _kSignInSucceededPrefKey = 'remindme_sign_in_succeeded';
   Future<void> _authPreferenceWork = Future.value();
   Future<void>? _authCleanup;
+  Future<void>? _googleSessionCleanup;
   bool _awaitingRestoreEvent = false;
   Timer? _restoreTimer;
   bool _signingOut = false;
@@ -77,9 +84,14 @@ class AuthRepository extends ChangeNotifier {
     signingIn = false;
   }
 
-  Future<void> _authenticationFailed(Object error, StackTrace stack) {
+  Future<void> _authenticationFailed(
+    Object error,
+    StackTrace stack, {
+    bool clearGoogle = true,
+  }) {
     logError('Sign in failed', error, stack);
     return _resetSignInSession(
+      clearGoogle: clearGoogle,
       error:
           error is GoogleSignInException &&
               error.code == GoogleSignInExceptionCode.canceled
@@ -99,15 +111,21 @@ class AuthRepository extends ChangeNotifier {
     return _authCleanup = _finishSignInReset(generation, clearGoogle);
   }
 
-  Future<void> _clearGoogleSession() async {
-    _signingOut = true;
+  Future<void> _clearGoogleSession() {
+    // Future.timeout only stops waiting; it cannot cancel Credential Manager.
+    // Retain the native operation so retries wait for it instead of overlapping it.
+    final cleanup = _googleSessionCleanup ??= _finishGoogleSessionCleanup();
+    return cleanup.timeout(sessionCleanupTimeout);
+  }
+
+  Future<void> _finishGoogleSessionCleanup() async {
     try {
-      await _signIn.signOut().timeout(silentTimeout);
+      await _signIn.signOut();
     } finally {
-      // The platform and SDK relay sign-out through separate async streams.
-      // Keep our own sign-out events suppressed until both have delivered.
+      // Suppress our own sign-out events until both SDK streams have delivered,
+      // including events arriving after a caller's cleanup wait timed out.
       await Future<void>.delayed(Duration.zero);
-      _signingOut = false;
+      _googleSessionCleanup = null;
     }
   }
 
@@ -153,7 +171,12 @@ class AuthRepository extends ChangeNotifier {
     _googleInitialized = true;
     _sub = _signIn.authenticationEvents.listen(
       (event) {
-        if (_disposed || _authCleanup != null || _signingOut) return;
+        if (_disposed ||
+            _authCleanup != null ||
+            _googleSessionCleanup != null ||
+            _signingOut) {
+          return;
+        }
         if (event is GoogleSignInAuthenticationEventSignOut) {
           unawaited(_resetSignInSession(clearGoogle: false));
         } else if (event is GoogleSignInAuthenticationEventSignIn &&
@@ -170,6 +193,7 @@ class AuthRepository extends ChangeNotifier {
         if (!_disposed &&
             !signingIn &&
             !_signingOut &&
+            _googleSessionCleanup == null &&
             (signedIn || _awaitingRestoreEvent)) {
           unawaited(_authenticationFailed(error, stack));
         }
@@ -252,23 +276,32 @@ class AuthRepository extends ChangeNotifier {
 
   Future<void> signIn() async {
     if (signingIn || _authCleanup != null || _signingOut || _disposed) return;
-    _awaitingRestoreEvent = false;
-    _restoreTimer?.cancel();
+    // Clear local identity, authorization and the HTTP client reference even if
+    // initialization or native session cleanup fails before authentication.
+    _clearAuthentication();
     signingIn = true;
     authError = null;
-    final generation = ++_authGeneration;
+    final generation = _authGeneration;
+    var cleanupFailed = false;
     _publishAuth();
     try {
       await _saveSignInSuccess(false);
       await _initializeGoogle().timeout(silentTimeout);
-      // A previous cleanup may have failed; retry before starting a new flow.
-      await _clearGoogleSession();
+      if (_disposed || generation != _authGeneration) return;
+      try {
+        await _clearGoogleSession();
+      } catch (_) {
+        cleanupFailed = true;
+        rethrow;
+      }
       if (_disposed || generation != _authGeneration) return;
       final user = await _signIn.authenticate();
       await _completeSignIn(user, generation, interactive: true);
     } catch (error, stack) {
       if (generation == _authGeneration) {
-        await _authenticationFailed(error, stack);
+        // Preflight already tried cleanup. Do not wait a second timeout or
+        // launch another native reset in this attempt's error handler.
+        await _authenticationFailed(error, stack, clearGoogle: !cleanupFailed);
       }
     } finally {
       if (generation == _authGeneration) {
