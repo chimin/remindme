@@ -91,7 +91,7 @@ void main() {
         await _expectEditor($, title: title, notes: notes);
         await _capture($, '07_new_task_form');
         createAttempted = true;
-        await $(find.text('Create task')).scrollTo().tap();
+        await $(find.byTooltip('Save task')).tap();
         await _waitFor(
           $,
           () => find.byType(TaskHomeScreen).evaluate().isNotEmpty,
@@ -117,7 +117,7 @@ void main() {
         await $(#task_notes).enterText(editedNotes);
         await _expectEditor($, title: editedTitle, notes: editedNotes);
         await _capture($, '09_edited_task_form');
-        await $(find.text('Save changes')).scrollTo().tap();
+        await $(find.byTooltip('Save task')).tap();
         await _waitFor(
           $,
           () => find.byType(TaskHomeScreen).evaluate().isNotEmpty,

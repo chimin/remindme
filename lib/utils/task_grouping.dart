@@ -90,6 +90,7 @@ List<Map<String, dynamic>> buildWidgetDisplayItems(
   List<Task> tasks,
   DateTime now, {
   String? taskListName,
+  String? taskListId,
 }) {
   final groups = groupTasksByDueDate(tasks, now, showCompleted: false);
   final items = <Map<String, dynamic>>[];
@@ -108,6 +109,7 @@ List<Map<String, dynamic>> buildWidgetDisplayItems(
       items.add({
         'type': 'task',
         'id': item.id,
+        'taskListId': ?taskListId,
         'title': item.title,
         'completed': item.completed,
       });

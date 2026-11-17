@@ -402,6 +402,7 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
       WidgetService.updateWidget(
         _tasks,
         taskListName: _selectedTaskListTitle(),
+        taskListId: id,
       );
     }
   }

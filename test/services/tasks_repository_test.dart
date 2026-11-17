@@ -144,6 +144,42 @@ void main() {
     );
 
     test(
+      'update task should complete edited fields and preserve successors when a recurring task is reopened',
+      () => run(() async {
+        final old = (await repo.getCachedTasks('list')).single;
+        await repo.updateTask(
+          'list',
+          'old',
+          title: 'Edited title',
+          notes: old.notes,
+          due: DateTime.parse(old.due!),
+          completed: true,
+        );
+        final completed = (await repo.getCacheEntries(
+          'list',
+        )).singleWhere((entry) => entry.id == 'old');
+        expect(completed.completed, isTrue);
+        expect(completed.title, 'Edited title');
+        expect(server.creates, 1);
+        final next = (await repo.getCacheEntries(
+          'list',
+        )).singleWhere((entry) => entry.id != 'old');
+        expect(next.title, 'Edited title');
+        await repo.completeTask('list', 'old', false);
+        final reopened = (await repo.getCacheEntries(
+          'list',
+        )).singleWhere((entry) => entry.id == 'old');
+        expect(reopened.completed, isFalse);
+        expect(reopened.status, 'needsAction');
+        expect(reopened.title, completed.title);
+        expect(reopened.notes, completed.notes);
+        expect(reopened.due, completed.due);
+        expect(server.creates, 1);
+        expect(await repo.getCacheEntries('list'), hasLength(2));
+      }),
+    );
+
+    test(
       'complete task should create one successor when completion requests overlap',
       () => run(() async {
         await Future.wait([

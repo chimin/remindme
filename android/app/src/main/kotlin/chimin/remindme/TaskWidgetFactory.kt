@@ -23,6 +23,8 @@ class TaskWidgetFactory(context: Context, intent: Intent) : RemoteViewsService.R
     val title: String,
     val completed: Boolean,
     val category: String,
+    val taskId: String = "",
+    val taskListId: String = "",
   )
 
   private data class WidgetColorConfig(
@@ -102,6 +104,10 @@ class TaskWidgetFactory(context: Context, intent: Intent) : RemoteViewsService.R
         views.setInt(R.id.title, "setTextColor", colorConfig.textColor)
       }
     }
+    views.setOnClickFillInIntent(
+      if (item.type == "header") R.id.group_title else R.id.task_item_root,
+      TaskWidgetProvider.taskFillInIntent(item.taskListId, item.taskId),
+    )
     return views
   }
 
@@ -138,6 +144,8 @@ class TaskWidgetFactory(context: Context, intent: Intent) : RemoteViewsService.R
                   title = obj.optString("title", "(no title)"),
                   completed = false,
                   category = "",
+                  taskId = if (obj.isNull("id")) "" else obj.optString("id", ""),
+                  taskListId = if (obj.isNull("taskListId")) "" else obj.optString("taskListId", ""),
                 ),
               )
             }

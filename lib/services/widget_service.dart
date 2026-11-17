@@ -19,19 +19,22 @@ class WidgetService {
   /// home-screen widget, triggering a native refresh.
   ///
   /// [taskListName] is the name of the task list the tasks belong to; when
-  /// given it is shown as the widget title.
+  /// given it is shown as the widget title. [taskListId] identifies the owning
+  /// list so tapping a task can open its editor.
   ///
   /// Best-effort: platform errors (e.g. widget not registered during dev) are
   /// logged and never rethrown, so the app keeps working.
   static Future<void> updateWidget(
     List<Task> tasks, {
     String? taskListName,
+    String? taskListId,
   }) async {
     try {
       final data = buildWidgetDisplayItems(
         tasks,
         DateTime.now(),
         taskListName: taskListName,
+        taskListId: taskListId,
       );
       final json = jsonEncode(data);
       await HomeWidget.saveWidgetData<String>(dataKey, json);

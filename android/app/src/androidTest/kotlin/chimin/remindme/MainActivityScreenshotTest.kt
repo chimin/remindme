@@ -4,6 +4,8 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
@@ -28,7 +30,7 @@ class MainActivityScreenshotTest {
     private fun launchFixture() {
         device.wakeUp()
         device.executeShellCommand("wm dismiss-keyguard")
-        device.executeShellCommand("am start -W -n " + context.packageName + "/.MainActivity")
+        device.executeShellCommand("am start -W -a es.antonborri.home_widget.action.LAUNCH -d remindme://home -n " + context.packageName + "/.MainActivity")
         for (title in listOf("Renew library books", "Pick up groceries",
                 "Plan weekend trip", "Book dentist appointment")) {
             var attempts = 0
@@ -119,4 +121,63 @@ class MainActivityScreenshotTest {
         }
         capture("home_screen_widget.png")
     }
+
+    @Test
+    fun widgetTapShouldOpenTheSelectedTaskWhenTheAppIsColdOrAlreadyRunning() = verifyWidgetTaskTaps(false)
+
+    @Test
+    fun widgetTapShouldOpenTheSelectedTaskWhenUsingTheLegacyService() = verifyWidgetTaskTaps(true)
+
+    private fun findWidgetTask(title: String): androidx.test.uiautomator.UiObject2 {
+        // Home can return to the launcher's default page rather than the widget page.
+        repeat(10) {
+            val row = device.wait(Until.findObject(By.text(title)), 1000)
+            if (row != null) return row
+            device.swipe(device.displayWidth * 9 / 10, device.displayHeight * 2 / 3,
+                device.displayWidth / 10, device.displayHeight * 2 / 3, 30)
+        }
+        error("Widget task was not visible: $title")
+    }
+
+    private fun verifyWidgetTaskTaps(legacyService: Boolean) {
+        captureShouldShowHomeWidgetWhenFourDatedTasksExist()
+        fun publishLegacyViews() {
+            if (!legacyService) return
+            val manager = AppWidgetManager.getInstance(context)
+            val provider = ComponentName(context, TaskWidgetProvider::class.java)
+            instrumentation.runOnMainSync {
+                for (id in manager.getAppWidgetIds(provider)) {
+                    manager.updateAppWidget(id, TaskWidgetProvider().buildViews(context, id, false))
+                    manager.notifyAppWidgetViewDataChanged(id, R.id.task_list)
+                }
+            }
+            device.waitForIdle()
+        }
+        publishLegacyViews()
+        // Destroy the Flutter activity/engine without killing instrumentation.
+        instrumentation.runOnMainSync {
+            val monitor = ActivityLifecycleMonitorRegistry.getInstance()
+            listOf(Stage.RESUMED, Stage.STARTED, Stage.STOPPED, Stage.PAUSED, Stage.CREATED)
+                .flatMap { monitor.getActivitiesInStage(it).toList() }
+                .distinct().filterIsInstance<MainActivity>().forEach { it.finish() }
+        }
+        instrumentation.waitForIdleSync()
+        device.pressHome()
+        findWidgetTask("Renew library books").click()
+        assertTrue("Cold widget tap did not open the task editor",
+            device.wait(Until.hasObject(By.descContains("Edit task")), timeout))
+        assertTrue("Wrong task opened", device.wait(Until.hasObject(By.text("Renew library books")), timeout))
+        assertTrue("Save action missing", device.wait(Until.hasObject(By.desc("Save task")), timeout))
+        capture(if (legacyService) "widget_task_editor_legacy.png" else "widget_task_editor.png")
+        publishLegacyViews()
+        device.pressHome()
+        findWidgetTask("Pick up groceries").click()
+        assertTrue("Warm widget tap did not open the requested task",
+            device.wait(Until.hasObject(By.text("Pick up groceries")), timeout))
+        assertTrue(device.hasObject(By.descContains("Edit task")))
+        device.pressBack()
+        assertTrue("Back should return home rather than an older editor",
+            device.wait(Until.hasObject(By.desc("Add task")), timeout))
+    }
+
 }

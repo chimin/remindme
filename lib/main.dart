@@ -9,6 +9,7 @@ import 'services/tasks_repository.dart';
 import 'screens/login_screen.dart';
 import 'screens/task_home_screen.dart';
 import 'utils/log.dart';
+import 'widgets/widget_task_navigator.dart';
 
 Future<void> main() => startApp();
 
@@ -37,18 +38,29 @@ Future<void> _initializeBackgroundSync(SyncService service) async {
   }
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key, this.showDebugBanner = false});
 
   final bool showDebugBanner;
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Remind Me',
-      debugShowCheckedModeBanner: showDebugBanner,
+      debugShowCheckedModeBanner: widget.showDebugBanner,
+      navigatorKey: _navigatorKey,
       theme: createAppTheme(),
-      home: const AuthRouter(),
+      home: WidgetTaskNavigator(
+        navigatorKey: _navigatorKey,
+        child: const AuthRouter(),
+      ),
     );
   }
 }

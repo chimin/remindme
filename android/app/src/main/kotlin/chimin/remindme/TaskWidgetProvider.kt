@@ -1,5 +1,6 @@
 package chimin.remindme
 
+import android.app.ActivityOptions
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -13,6 +14,7 @@ import android.view.View
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
 import es.antonborri.home_widget.HomeWidgetPlugin
+import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -27,7 +29,8 @@ import org.json.JSONObject
  * Each data item is either the task list title (`type: "tasklist"`, with a
  * `title`), a group header (`type: "header"`, with a `category` of
  * "today" / "overdue" / "noDueDate" / "future") or a task (`type: "task"`,
- * with a `title` and `completed` flag). Tapping the widget opens the app.
+ * with a `title`, `completed` flag, `id`, and `taskListId`). Task taps open
+ * their editor; other widget surfaces open the home screen.
  *
  * `onUpdate` is intentionally defensive: any per-item or per-widget rendering
  * error is logged and skipped so the widget always loads (showing at least the
@@ -39,6 +42,15 @@ class TaskWidgetProvider : AppWidgetProvider() {
     private const val TAG = "TaskWidgetProvider"
     const val DATA_KEY = "task_widget_data"
     const val CONFIG_KEY = "task_widget_config"
+
+    internal fun taskFillInIntent(taskListId: String?, taskId: String?): Intent {
+      val uri = if (!taskListId.isNullOrBlank() && !taskId.isNullOrBlank()) {
+        Uri.Builder().scheme("remindme").authority("task").path("/edit")
+          .appendQueryParameter("taskListId", taskListId)
+          .appendQueryParameter("taskId", taskId).build()
+      } else Uri.parse("remindme://home")
+      return Intent().setData(uri)
+    }
   }
 
   private data class WidgetItem(
@@ -46,6 +58,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
     val title: String,
     val completed: Boolean,
     val category: String,
+    val taskId: String = "",
+    val taskListId: String = "",
   )
 
   private data class WidgetColorConfig(
@@ -112,6 +126,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
                   title = obj.optString("title", "(no title)"),
                   completed = false,
                   category = "",
+                  taskId = if (obj.isNull("id")) "" else obj.optString("id", ""),
+                  taskListId = if (obj.isNull("taskListId")) "" else obj.optString("taskListId", ""),
                 ),
               )
             }
@@ -125,16 +141,24 @@ class TaskWidgetProvider : AppWidgetProvider() {
     }
   }
 
-  private fun openAppIntent(context: Context): PendingIntent {
+  private fun openAppIntent(context: Context): PendingIntent =
+    HomeWidgetLaunchIntent.getActivity(context, MainActivity::class.java, Uri.parse("remindme://home"))
+
+  private fun collectionLaunchIntent(context: Context, widgetId: Int): PendingIntent {
+    // Data is supplied by each row. The explicit component confines the mutable template.
     val intent = Intent(context, MainActivity::class.java).apply {
-      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+      action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
+      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
     }
-    val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    } else {
-      PendingIntent.FLAG_UPDATE_CURRENT
+    val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+      (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+    val options = ActivityOptions.makeBasic()
+    if (Build.VERSION.SDK_INT >= 35) {
+      options.setPendingIntentCreatorBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+    } else if (Build.VERSION.SDK_INT >= 34) {
+      options.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
     }
-    return PendingIntent.getActivity(context, 0, intent, flags)
+    return PendingIntent.getActivity(context, widgetId, intent, flags, options.toBundle())
   }
 
   private fun buildItemViews(
@@ -161,7 +185,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
             colorConfig.textColor
           },
         )
-        if (pending != null) setOnClickPendingIntent(R.id.group_title, pending)
+        setOnClickFillInIntent(R.id.group_title, taskFillInIntent(null, null))
       }
       else -> RemoteViews(pkg, R.layout.task_widget_item).apply {
         setTextViewText(R.id.title, item.title)
@@ -179,7 +203,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
         } else {
           setInt(R.id.title, "setTextColor", colorConfig.textColor)
         }
-        if (pending != null) setOnClickPendingIntent(R.id.task_item_root, pending)
+        setOnClickFillInIntent(R.id.task_item_root, taskFillInIntent(item.taskListId, item.taskId))
       }
     }
   }
@@ -199,7 +223,11 @@ class TaskWidgetProvider : AppWidgetProvider() {
     }
   }
 
-  internal fun buildViews(context: Context, widgetId: Int): RemoteViews {
+  internal fun buildViews(
+    context: Context,
+    widgetId: Int,
+    inlineCollection: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S,
+  ): RemoteViews {
     val prefs = HomeWidgetPlugin.getData(context)
     val items = loadItems(prefs)
     val colorConfig = loadColorConfig(prefs)
@@ -208,7 +236,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
       setTextViewText(R.id.task_list_title, items.firstOrNull { it.type == "tasklist" }?.title ?: "")
       setInt(R.id.task_list_title, "setTextColor", colorConfig.textColor)
       setOnClickPendingIntent(R.id.task_list_title, pending)
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      setPendingIntentTemplate(R.id.task_list, collectionLaunchIntent(context, widgetId))
+      if (inlineCollection && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         // Send row colors and the surrounding appearance in one snapshot so
         // the launcher does not need a separate service refresh for the rows.
         val collection = RemoteViews.RemoteCollectionItems.Builder()

@@ -53,6 +53,14 @@ class _StartupRepository extends MockTasksRepository {
 
 void main() {
   setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockStreamHandler(
+          const EventChannel('home_widget/updates'),
+          MockStreamHandler.inline(onListen: (_, events) {}),
+        );
+  });
+
+  setUp(() {
     final view = TestWidgetsFlutterBinding.ensureInitialized()
         .platformDispatcher
         .implicitView!;

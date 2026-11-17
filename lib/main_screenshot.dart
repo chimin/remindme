@@ -15,7 +15,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final repository = _ScreenshotRepository();
   // Publish the same fixture to the real Android widget before opening the UI.
-  await WidgetService.updateWidget(repository.tasks, taskListName: 'My Tasks');
+  await WidgetService.updateWidget(
+    repository.tasks,
+    taskListName: 'My Tasks',
+    taskListId: repository.selectedTasklistId,
+  );
   runApp(
     ChangeNotifierProvider<TasksRepository>.value(
       value: repository,

@@ -335,4 +335,21 @@ void main() {
       }
     },
   );
+  test(
+    'buildWidgetDisplayItems should identify the owning list when navigation is enabled',
+    () {
+      final items = buildWidgetDisplayItems(
+        [Task(id: 'task/id', title: 'Task')],
+        DateTime(2026, 1, 15),
+        taskListId: 'list/id',
+      );
+      final task = items.singleWhere((item) => item['type'] == 'task');
+      expect(task['id'], 'task/id');
+      expect(task['taskListId'], 'list/id');
+      final legacy = buildWidgetDisplayItems([
+        Task(id: 'task', title: 'Task'),
+      ], DateTime(2026, 1, 15));
+      expect(legacy.last.containsKey('taskListId'), isFalse);
+    },
+  );
 }

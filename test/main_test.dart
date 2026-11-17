@@ -32,6 +32,15 @@ class _RetryRepository extends TasksRepository {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockStreamHandler(
+          const EventChannel('home_widget/updates'),
+          MockStreamHandler.inline(onListen: (_, events) {}),
+        );
+  });
+
   setUpAll(() async {
     for (final entry in {
       'Roboto': 'test/fonts/roboto-regular.ttf',

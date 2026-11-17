@@ -65,7 +65,9 @@ void main() {
 
     expect(find.text('New task'), findsOneWidget);
     expect(find.byType(TextFormField), findsOneWidget);
-    expect(find.text('Create task'), findsOneWidget);
+    expect(find.byTooltip('Save task'), findsOneWidget);
+    expect(find.byType(FilledButton), findsNothing);
+    expect(find.text('This task is completed'), findsNothing);
 
     await expectLater(
       find.byKey(boundaryKey),
@@ -94,7 +96,10 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<RecordingTasksRepository> openDeleteEditor(WidgetTester tester) async {
+  Future<RecordingTasksRepository> openDeleteEditor(
+    WidgetTester tester, {
+    bool completed = false,
+  }) async {
     final repo = RecordingTasksRepository();
     await tester.pumpWidget(
       ChangeNotifierProvider<TasksRepository>.value(
@@ -113,6 +118,7 @@ void main() {
                         taskListId: 'list-1',
                         task: Task(
                           id: 'task-1',
+                          status: completed ? 'completed' : 'needsAction',
                           title: 'Water plants',
                           notes: 'Keep soil moist',
                         ),
@@ -273,7 +279,7 @@ void main() {
         find.byKey(const ValueKey('editor')),
         matchesGoldenFile('golden/task_edit_screen_repeat.png'),
       );
-      await tester.tap(find.byType(FilledButton));
+      await tester.tap(find.byTooltip('Save task'));
       await tester.pumpAndSettle();
       final saved = TaskMetadata.parse(repo.saved!.notes);
       expect(saved.data['futureFeature'], {'color': 'green'});
@@ -296,7 +302,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Daily').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(FilledButton));
+    await tester.tap(find.byTooltip('Save task'));
     await tester.pumpAndSettle();
     expect(find.text('Choose a due date for repeating tasks'), findsOneWidget);
     expect(repo.saved, isNull);
@@ -323,7 +329,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Never').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(FilledButton));
+    await tester.tap(find.byTooltip('Save task'));
     await tester.pumpAndSettle();
     final saved = TaskMetadata.parse(repo.saved!.notes);
     expect(saved.data.containsKey('recurrence'), isFalse);
@@ -345,7 +351,7 @@ void main() {
         notes: TaskMetadata('Notes', {'recurrence': rule}).encode(),
       ),
     );
-    await tester.tap(find.byType(FilledButton));
+    await tester.tap(find.byTooltip('Save task'));
     await tester.pumpAndSettle();
     expect(TaskMetadata.parse(repo.saved!.notes).data['recurrence'], rule);
   });
@@ -358,8 +364,8 @@ void main() {
       addTearDown(tester.view.resetViewInsets);
       await pumpEditor(tester, repo);
       await tester.enterText(find.byType(TextFormField), 'Water plants');
-      await tester.ensureVisible(find.byType(FilledButton));
-      await tester.tap(find.byType(FilledButton));
+      await tester.ensureVisible(find.byTooltip('Save task'));
+      await tester.tap(find.byTooltip('Save task'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(repo.saved!.title, 'Water plants');
@@ -407,15 +413,309 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('No due date'), findsOneWidget);
       expect(find.byType(DatePickerDialog), findsNothing);
-      await tester.tap(find.byType(FilledButton));
+      await tester.tap(find.byTooltip('Save task'));
       await tester.pumpAndSettle();
       expect(repo.saved!.due, isNull);
+    },
+  );
+
+  testWidgets(
+    'editor should place Save after Delete when an incomplete task opens',
+    (tester) async {
+      final repo = RecordingTasksRepository();
+      await pumpEditor(
+        tester,
+        repo,
+        task: Task(id: 'task', title: 'Water plants'),
+      );
+      final actions = tester.widget<AppBar>(find.byType(AppBar)).actions!;
+      expect(actions.whereType<IconButton>().map((button) => button.tooltip), [
+        'Delete task',
+        'Save task',
+      ]);
+      expect(find.text('Mark as completed'), findsOneWidget);
+
+      await expectLater(
+        find.byKey(const ValueKey('editor')),
+        matchesGoldenFile('golden/task_edit_screen_incomplete.png'),
+      );
+    },
+  );
+
+  testWidgets(
+    'editor should prevent field changes when a completed task opens',
+    (tester) async {
+      final repo = RecordingTasksRepository();
+      await pumpEditor(
+        tester,
+        repo,
+        task: Task(
+          id: 'task',
+          title: 'Water plants',
+          notes: 'Keep soil moist',
+          due: '2030-01-01T00:00:00Z',
+          status: 'completed',
+        ),
+      );
+      expect(find.byTooltip('Save task'), findsNothing);
+      expect(find.byTooltip('Delete task'), findsOneWidget);
+      expect(find.text('Mark as incomplete'), findsOneWidget);
+      expect(find.text('View task'), findsOneWidget);
+      expect(find.text('This task is completed'), findsOneWidget);
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('completed_task_badge')))
+            .width,
+        tester.getSize(find.byKey(const ValueKey('task_title'))).width,
+      );
+      expect(
+        tester
+            .widget<TextField>(
+              find.descendant(
+                of: find.byType(TextFormField),
+                matching: find.byType(TextField),
+              ),
+            )
+            .readOnly,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('task_notes')))
+            .readOnly,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(
+              find.byType(DropdownButtonFormField<String>),
+            )
+            .onChanged,
+        isNull,
+      );
+      expect(find.byTooltip('Clear due date'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('due_date_field')));
+      await tester.pumpAndSettle();
+      expect(find.byType(DatePickerDialog), findsNothing);
+      await expectLater(
+        find.byKey(const ValueKey('editor')),
+        matchesGoldenFile('golden/task_edit_screen_completed.png'),
+      );
+    },
+  );
+
+  testWidgets(
+    'mark completed should save edited fields and return home when an incomplete task is submitted',
+    (tester) async {
+      final repo = await openDeleteEditor(tester);
+      await tester.enterText(
+        find.byKey(const ValueKey('task_title')),
+        'Changed title',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('task_notes')),
+        'Changed notes',
+      );
+      await tester.tap(find.text('Mark as completed'));
+      await tester.pumpAndSettle();
+      expect(repo.saved!.title, 'Changed title');
+      expect(TaskMetadata.parse(repo.saved!.notes).notes, 'Changed notes');
+      expect(repo.saved!.status, 'completed');
+      expect(find.text('Open editor'), findsOneWidget);
+      expect(find.byType(TaskEditScreen), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'mark incomplete should retain fields and enable editing when completion is reversed',
+    (tester) async {
+      final repo = await openDeleteEditor(tester, completed: true);
+      expect(find.text('View task'), findsOneWidget);
+      await tester.tap(find.text('Mark as incomplete'));
+      await tester.pumpAndSettle();
+      expect(repo.completionCalls, [('list-1', 'task-1', false)]);
+      expect(repo.saved, isNull);
+      expect(find.byType(TaskEditScreen), findsOneWidget);
+      expect(find.text('Water plants'), findsOneWidget);
+      expect(find.text('Keep soil moist'), findsOneWidget);
+      expect(find.byTooltip('Save task'), findsOneWidget);
+      expect(find.text('Mark as completed'), findsOneWidget);
+      expect(find.text('Edit task'), findsOneWidget);
+      expect(find.text('View task'), findsNothing);
+      expect(find.text('This task is completed'), findsNothing);
+
+      expect(
+        tester
+            .widget<TextField>(
+              find.descendant(
+                of: find.byType(TextFormField),
+                matching: find.byType(TextField),
+              ),
+            )
+            .readOnly,
+        isFalse,
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('task_title')),
+        'Now editable',
+      );
+      await tester.tap(find.byTooltip('Save task'));
+      await tester.pumpAndSettle();
+      expect(repo.saved!.title, 'Now editable');
+      expect(repo.saved!.status, 'needsAction');
+    },
+  );
+
+  testWidgets('mark completed should retain the editor when validation fails', (
+    tester,
+  ) async {
+    final repo = await openDeleteEditor(tester);
+    await tester.enterText(find.byKey(const ValueKey('task_title')), ' ');
+    await tester.tap(find.text('Mark as completed'));
+    await tester.pumpAndSettle();
+    expect(find.text('Title is required'), findsOneWidget);
+    expect(repo.saved, isNull);
+    expect(find.byType(TaskEditScreen), findsOneWidget);
+  });
+
+  testWidgets(
+    'mark incomplete should skip validation when a completed task has an empty title',
+    (tester) async {
+      final repo = RecordingTasksRepository();
+      await pumpEditor(
+        tester,
+        repo,
+        task: Task(id: 'task', title: '', status: 'completed'),
+      );
+      await tester.tap(find.text('Mark as incomplete'));
+      await tester.pumpAndSettle();
+      expect(repo.completionCalls, [('list-1', 'task', false)]);
+      expect(find.text('Title is required'), findsNothing);
+      expect(find.text('Mark as completed'), findsOneWidget);
+    },
+  );
+
+  testWidgets('mark incomplete should remain read only when the update fails', (
+    tester,
+  ) async {
+    final repo = await openDeleteEditor(tester, completed: true);
+    repo.saveError = StateError('offline');
+    await tester.tap(find.text('Mark as incomplete'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Failed to mark task as incomplete: Bad state: offline'),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Save task'), findsNothing);
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.byType(TextFormField),
+              matching: find.byType(TextField),
+            ),
+          )
+          .readOnly,
+      isTrue,
+    );
+    expect(find.text('Mark as incomplete'), findsOneWidget);
+    expect(find.text('View task'), findsOneWidget);
+  });
+
+  testWidgets(
+    'mark completed should disable other actions when the update is pending',
+    (tester) async {
+      final repo = await openDeleteEditor(tester);
+      repo.pendingSave = Completer<void>();
+      final callback = tester
+          .widget<FilledButton>(find.byType(FilledButton))
+          .onPressed!;
+      callback();
+      callback();
+      await tester.pump();
+      expect(repo.saveCalls, 1);
+      for (final tooltip in ['Save task', 'Delete task']) {
+        expect(
+          tester
+              .widget<IconButton>(
+                find.byWidgetPredicate(
+                  (widget) => widget is IconButton && widget.tooltip == tooltip,
+                ),
+              )
+              .onPressed,
+          isNull,
+        );
+      }
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull,
+      );
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      repo.pendingSave!.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(TaskEditScreen), findsNothing);
+    },
+  );
+
+  testWidgets('mark completed should retain edited fields when saving fails', (
+    tester,
+  ) async {
+    final repo = await openDeleteEditor(tester);
+    repo.saveError = StateError('offline');
+    await tester.enterText(
+      find.byKey(const ValueKey('task_title')),
+      'Keep my changes',
+    );
+    await tester.tap(find.text('Mark as completed'));
+    await tester.pumpAndSettle();
+    expect(find.text('Keep my changes'), findsOneWidget);
+    expect(
+      find.text('Failed to save task: Bad state: offline'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byWidgetPredicate(
+              (widget) => widget is IconButton && widget.tooltip == 'Save task',
+            ),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets(
+    'delete should remain available when a completed task is viewed',
+    (tester) async {
+      final repo = await openDeleteEditor(tester, completed: true);
+      await openDeleteDialog(tester);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(repo.deleted, [('list-1', 'task-1')]);
+      expect(find.byType(TaskEditScreen), findsNothing);
     },
   );
 }
 
 class RecordingTasksRepository extends MockTasksRepository {
   Task? saved;
+  int saveCalls = 0;
+  Object? saveError;
+  Completer<void>? pendingSave;
+  final completionCalls = <(String, String, bool)>[];
+
+  @override
+  Future<void> completeTask(
+    String tasklistId,
+    String taskId,
+    bool value,
+  ) async {
+    completionCalls.add((tasklistId, taskId, value));
+    if (saveError != null) throw saveError!;
+    if (pendingSave != null) await pendingSave!.future;
+  }
+
   final deleted = <(String, String)>[];
   Completer<void>? pendingDeletion;
   Object? deletionError;
@@ -434,6 +734,9 @@ class RecordingTasksRepository extends MockTasksRepository {
     String? notes,
     DateTime? due,
   }) async {
+    saveCalls++;
+    if (saveError != null) throw saveError!;
+    if (pendingSave != null) await pendingSave!.future;
     return saved = Task(
       id: 'created',
       title: title,
@@ -451,8 +754,12 @@ class RecordingTasksRepository extends MockTasksRepository {
     bool? completed,
     DateTime? due,
   }) async {
+    saveCalls++;
+    if (saveError != null) throw saveError!;
+    if (pendingSave != null) await pendingSave!.future;
     return saved = Task(
       id: taskId,
+      status: completed == true ? 'completed' : 'needsAction',
       title: title,
       notes: notes,
       due: due?.toIso8601String(),

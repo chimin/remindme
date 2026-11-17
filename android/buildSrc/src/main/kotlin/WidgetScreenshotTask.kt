@@ -172,7 +172,7 @@ abstract class WidgetScreenshotTask : DefaultTask() {
         }
         val report = instrumentationOutput.toString()
         println(report)
-        if (result.exitValue != 0 || !report.contains("OK (3 tests)")) {
+        if (result.exitValue != 0 || !Regex("""OK \(\d+ tests?\)""").containsMatchIn(report)) {
             error("Screenshot instrumentation failed. See the test report above.")
         }
     }

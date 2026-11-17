@@ -9,6 +9,15 @@ import 'package:remindme/screens/task_home_screen.dart';
 import 'package:remindme/services/tasks_repository.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockStreamHandler(
+          const EventChannel('home_widget/updates'),
+          MockStreamHandler.inline(onListen: (_, events) {}),
+        );
+  });
+
   testWidgets(
     'main should display four dated tasks and publish matching widget data '
     'when the screenshot entry point starts',
@@ -18,6 +27,7 @@ void main() {
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
         call,
       ) async {
+        if (call.method == 'initiallyLaunchedFromHomeWidget') return null;
         if (call.method == 'saveWidgetData') {
           payloads.add(
             jsonDecode((call.arguments as Map)['data'] as String)

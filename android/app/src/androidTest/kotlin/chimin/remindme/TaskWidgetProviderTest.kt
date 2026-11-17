@@ -161,4 +161,23 @@ class TaskWidgetProviderTest {
     }
   }
 
+
+  @Test
+  fun taskFillInIntentShouldPreserveIdentityWhenIdsContainReservedCharacters() {
+    val uri = TaskWidgetProvider.taskFillInIntent("list /+?&", "task /+?&").data!!
+    assertEquals("remindme", uri.scheme)
+    assertEquals("task", uri.host)
+    assertEquals("/edit", uri.path)
+    assertEquals("list /+?&", uri.getQueryParameter("taskListId"))
+    assertEquals("task /+?&", uri.getQueryParameter("taskId"))
+    assertNotEquals(uri, TaskWidgetProvider.taskFillInIntent("other", "task /+?&").data)
+  }
+
+  @Test
+  fun taskFillInIntentShouldOpenHomeWhenLegacyPayloadLacksIdentity() {
+    for ((list, task) in listOf(null to null, "list" to null, null to "task", "" to "task")) {
+      assertEquals("remindme://home", TaskWidgetProvider.taskFillInIntent(list, task).data.toString())
+    }
+  }
+
 }
