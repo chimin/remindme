@@ -93,19 +93,22 @@ class MockTasksRepository extends TasksRepository {
 
 const double kGoldenDiffThreshold = 5.0;
 
-const String kLoginGoldenPath = 'test/screens/golden/login_screen.png';
-const String kTaskHomeGoldenPath = 'test/screens/golden/task_home_screen.png';
+const String kLoginGoldenPath =
+    'screenshots/login_screen/login_screen_when_displayed.png';
+const String kTaskHomeGoldenPath =
+    'screenshots/task_home_screen/task_home_screen_when_displayed.png';
 const String kTaskHomeListSwitcherGoldenPath =
-    'test/screens/golden/task_home_screen_list_switcher.png';
-const String kTaskEditGoldenPath = 'test/screens/golden/task_edit_screen.png';
+    'screenshots/task_home_screen/task_home_screen_when_list_switcher.png';
+const String kTaskEditGoldenPath =
+    'screenshots/task_edit_screen/task_edit_screen_when_displayed.png';
 const String kSignOutDialogGoldenPath =
-    'test/screens/golden/sign_out_dialog.png';
+    'screenshots/sign_out_dialog/sign_out_dialog_when_displayed.png';
 const String kWidgetColorConfigGoldenPath =
-    'test/screens/golden/widget_color_config_dialog.png';
+    'screenshots/widget_color_config_dialog/widget_color_config_dialog_when_displayed.png';
 const String kWidgetColorPickerDialogGoldenPath =
-    'test/screens/golden/widget_color_picker_dialog.png';
+    'screenshots/widget_color_picker_dialog/widget_color_picker_dialog_when_displayed.png';
 const String kTaskHomeMenuGoldenPath =
-    'test/screens/golden/task_home_screen_menu.png';
+    'screenshots/task_home_screen/task_home_screen_when_menu.png';
 const String kReportPath = 'test/reports/golden_comparison_report.md';
 
 Future<ui.Image> decodePng(Uint8List bytes) async {

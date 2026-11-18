@@ -60,7 +60,7 @@ void main() {
       final result = await captureAndCompare(
         tester,
         find.byType(LoginScreen),
-        'test/screens/golden/login_screen_failure.png',
+        'screenshots/login_screen/login_screen_when_failure.png',
         'login_screen_failure',
       );
       expect(result['pass'], isTrue);

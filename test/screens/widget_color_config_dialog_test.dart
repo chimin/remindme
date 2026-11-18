@@ -282,7 +282,9 @@ void main() {
     expect(tester.widget<Slider>(find.byType(Slider)).value, 100);
     await expectLater(
       find.byType(MaterialApp),
-      matchesGoldenFile('golden/widget_color_config_reset_confirmation.png'),
+      matchesGoldenFile(
+        '../../screenshots/widget_color_config_dialog/widget_color_config_dialog_when_reset_confirmation.png',
+      ),
     );
     await tester.tap(find.widgetWithText(FilledButton, 'Reset'));
     await tester.pumpAndSettle();
@@ -292,7 +294,9 @@ void main() {
     expect(preview.child, isNotNull);
     await expectLater(
       find.byType(MaterialApp),
-      matchesGoldenFile('golden/widget_color_config_reset.png'),
+      matchesGoldenFile(
+        '../../screenshots/widget_color_config_dialog/widget_color_config_dialog_when_reset.png',
+      ),
     );
     await tester.tap(find.text('Save appearance'));
     await tester.pumpAndSettle();
@@ -301,48 +305,49 @@ void main() {
     expect(find.byType(WidgetColorConfigDialog), findsNothing);
   });
 
-  testWidgets(
-    'appearance should retain saved colors when edits are cancelled',
-    (tester) async {
-      WidgetColorConfig? saved;
-      await tester.pumpWidget(
-        MaterialApp(
-          debugShowCheckedModeBanner: false,
-          theme: createAppTheme(),
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: TextButton(
-                onPressed: () => showDialog<void>(
-                  context: context,
-                  builder: (_) => WidgetColorConfigDialog(
-                    initial: const WidgetColorConfig(),
-                    onSaved: (value) => saved = value,
-                  ),
+  testWidgets('appearance should retain saved colors when edits are cancelled', (
+    tester,
+  ) async {
+    WidgetColorConfig? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: createAppTheme(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => WidgetColorConfigDialog(
+                  initial: const WidgetColorConfig(),
+                  onSaved: (value) => saved = value,
                 ),
-                child: const Text('Open'),
               ),
+              child: const Text('Open'),
             ),
           ),
         ),
-      );
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
-      tester.widget<Slider>(find.byType(Slider)).onChanged!(100);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Reset'));
-      await tester.pumpAndSettle();
-      expect(find.text('Reset widget appearance?'), findsOneWidget);
-      expect(tester.widget<Slider>(find.byType(Slider)).value, 100);
-      await expectLater(
-        find.byType(MaterialApp),
-        matchesGoldenFile('golden/widget_color_config_reset_confirmation.png'),
-      );
-      await tester.tap(find.text('Cancel').last);
-      await tester.pumpAndSettle();
-      expect(tester.widget<Slider>(find.byType(Slider)).value, 100);
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-      expect(saved, isNull);
-    },
-  );
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    tester.widget<Slider>(find.byType(Slider)).onChanged!(100);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reset'));
+    await tester.pumpAndSettle();
+    expect(find.text('Reset widget appearance?'), findsOneWidget);
+    expect(tester.widget<Slider>(find.byType(Slider)).value, 100);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile(
+        '../../screenshots/widget_color_config_dialog/widget_color_config_dialog_when_reset_confirmation.png',
+      ),
+    );
+    await tester.tap(find.text('Cancel').last);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Slider>(find.byType(Slider)).value, 100);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(saved, isNull);
+  });
 }

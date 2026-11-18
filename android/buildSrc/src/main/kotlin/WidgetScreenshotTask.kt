@@ -13,7 +13,7 @@ import java.io.File
  *   4. Wait for `sys.boot_completed` to become `1`.
  *   5. Install app and test APKs on the emulator.
  *   6. Run `am instrument` to capture widget screenshots.
- *   7. Pull screenshots from app-specific external storage into `android/app/test/screenshots`.
+ *   7. Pull screenshots from app-specific external storage into `android/screenshots`.
  */
 abstract class WidgetScreenshotTask : DefaultTask() {
 
@@ -154,7 +154,7 @@ abstract class WidgetScreenshotTask : DefaultTask() {
 
     private fun runTests(serial: String, adb: String) {
         installApks(adb, serial)
-        val testDir = File(project.projectDir, "app/test/screenshots")
+        val testDir = File(project.projectDir, "screenshots")
         testDir.mkdirs()
         // Clear stale screenshots from external storage before running.
         project.exec {
@@ -178,7 +178,7 @@ abstract class WidgetScreenshotTask : DefaultTask() {
     }
 
     private fun pullScreenshots(adb: String, serial: String) {
-        val testDir = File(project.projectDir, "app/test/screenshots")
+        val testDir = File(project.projectDir, "screenshots")
         testDir.mkdirs()
         // Screenshots are written to app-specific external storage by
         // MainActivityScreenshotTest. adb pull as the shell user can read this.

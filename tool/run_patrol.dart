@@ -17,7 +17,7 @@ Requires an unlocked English Android 10+ emulator with Google Play services.
 Physical devices are refused.
 Add the dedicated test account and revoke Remind Me consent before each run.
 The launcher clears ALL local Remind Me data on the selected device.
-Every run replaces numbered screenshots and golden/test.mp4 at stable paths.
+Every run replaces numbered screenshots and patrol_test/golden/test.mp4 at stable paths.
 ''';
 
 Future<void> main(List<String> arguments) async {
@@ -193,7 +193,8 @@ Future<void> main(List<String> arguments) async {
     }
 
     final output = Directory('patrol_test/golden');
-    preparePatrolArtifacts(output);
+    final screenshots = Directory('screenshots/e2e');
+    preparePatrolArtifacts(output, screenshots: screenshots);
     final recording = PatrolVideoRecorder(
       adb: adb,
       device: device,
@@ -269,6 +270,7 @@ Future<void> main(List<String> arguments) async {
           output,
           runId,
           stopAfterHome: stopAfterHome,
+          screenshots: screenshots,
         );
       } catch (error) {
         stderr.writeln('Evidence collection/stop failed: $error');
@@ -278,7 +280,7 @@ Future<void> main(List<String> arguments) async {
     if (runFailure != null) throw runFailure;
     stdout.writeln(
       'Patrol ${stopAfterHome ? 'sign-in check' : 'task lifecycle'} '
-      'passed. Screenshots and video: ${output.path}',
+      'passed. Screenshots: ${screenshots.path}; video: ${output.path}',
     );
   } catch (error) {
     stderr.writeln('$error\n$_usage');
@@ -288,9 +290,16 @@ Future<void> main(List<String> arguments) async {
 
 /// Replaces only this launcher's artifacts before a new test attempt.
 /// Unreached checkpoints must not look like screenshots from the current run.
-void preparePatrolArtifacts(Directory output) {
+void preparePatrolArtifacts(Directory output, {Directory? screenshots}) {
   output.createSync(recursive: true);
+  final screenshotDirectory = screenshots ?? output;
+  screenshotDirectory.createSync(recursive: true);
   final screenshot = RegExp(r'^\d{2}_[a-z0-9_]+\.png$');
+  for (final entry in screenshotDirectory.listSync(followLinks: false)) {
+    if (entry is File && screenshot.hasMatch(entry.uri.pathSegments.last)) {
+      entry.deleteSync();
+    }
+  }
   const diagnostics = {
     'test.mp4',
     'recording.txt',
@@ -300,7 +309,7 @@ void preparePatrolArtifacts(Directory output) {
   for (final entry in output.listSync(followLinks: false)) {
     if (entry is! File) continue;
     final name = entry.uri.pathSegments.last;
-    if (screenshot.hasMatch(name) || diagnostics.contains(name)) {
+    if (diagnostics.contains(name)) {
       entry.deleteSync();
     }
   }
@@ -313,6 +322,7 @@ Future<void> collectPatrolScreenshots(
   Directory output,
   String runId, {
   bool stopAfterHome = false,
+  Directory? screenshots,
 }) async {
   if (!RegExp(r'^\d+$').hasMatch(runId)) throw ArgumentError('Invalid run ID.');
   // Native filenames include a timestamp and run ID. Keep those on-device to
@@ -340,7 +350,8 @@ Future<void> collectPatrolScreenshots(
   final captured = <String>{};
   final points = latest.keys.toList()..sort();
   for (final point in points) {
-    final local = File('${output.path}/$point.png');
+    final local = File('${(screenshots ?? output).path}/$point.png');
+    await local.parent.create(recursive: true);
     await onDevice(['pull', latest[point]!.remote, local.absolute.path]);
     if (!local.existsSync() || local.lengthSync() == 0) {
       throw StateError('Empty screenshot: $point.png');

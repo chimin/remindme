@@ -18,9 +18,10 @@ object ScreenshotCapture {
     }
 
     fun captureScreenshot(name: String, actual: Bitmap, context: Context) {
-        val outDir = context.getExternalFilesDir("test_output") ?: context.filesDir
+        val outDir = File(context.getExternalFilesDir("test_output") ?: context.filesDir, "golden")
         outDir.mkdirs()
         val outFile = File(outDir, name)
+        outFile.parentFile!!.mkdirs()
         FileOutputStream(outFile).use { actual.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 }

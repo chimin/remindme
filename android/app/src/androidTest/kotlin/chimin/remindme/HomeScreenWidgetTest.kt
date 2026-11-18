@@ -82,7 +82,7 @@ class HomeScreenWidgetTest {
     }
 
     private fun captureHomeScreenScreenshot() {
-        val outFile = File("/sdcard/Pictures/home_screen_widget.png")
+        val outFile = File("/sdcard/Pictures/home_screen_widget/home_screen_widget_when_displayed.png")
         outFile.parentFile?.mkdirs()
         val success = device.takeScreenshot(outFile, 100f, 2) // 100f = quality, 2 = PNG format
         if (success) {

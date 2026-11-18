@@ -50,14 +50,15 @@ class MainActivityScreenshotTest {
     private fun capture(name: String) {
         device.waitForIdle()
         val directory = File(context.getExternalFilesDir("test_output"), "golden")
-        check(directory.isDirectory || directory.mkdirs())
-        assertTrue("Screenshot failed: $name", device.takeScreenshot(File(directory, name)))
+        val outFile = File(directory, name)
+        check(outFile.parentFile!!.isDirectory || outFile.parentFile!!.mkdirs())
+        assertTrue("Screenshot failed: $name", device.takeScreenshot(outFile))
     }
 
     @Test
     fun captureShouldShowTaskListingWhenFourDatedTasksExist() {
         launchFixture()
-        capture("task_listing.png")
+        capture("task_home_screen/task_home_screen_when_four_dated_tasks_exist.png")
     }
 
     @Test
@@ -71,7 +72,7 @@ class MainActivityScreenshotTest {
             device.wait(Until.hasObject(By.descContains("New task")), timeout))
         device.pressBack() // Dismiss the autofocus keyboard for the store screenshot.
         assertTrue(device.wait(Until.hasObject(By.descContains("New task")), timeout))
-        capture("add_task.png")
+        capture("task_edit_screen/task_edit_screen_when_adding_task.png")
     }
 
     @Test
@@ -119,7 +120,7 @@ class MainActivityScreenshotTest {
             assertTrue("Widget must show all four tasks; resize it taller: $title",
                 device.wait(Until.hasObject(By.text(title)), timeout))
         }
-        capture("home_screen_widget.png")
+        capture("home_screen_widget/home_screen_widget_when_four_dated_tasks_exist.png")
     }
 
     @Test
@@ -168,7 +169,7 @@ class MainActivityScreenshotTest {
             device.wait(Until.hasObject(By.descContains("Edit task")), timeout))
         assertTrue("Wrong task opened", device.wait(Until.hasObject(By.text("Renew library books")), timeout))
         assertTrue("Save action missing", device.wait(Until.hasObject(By.desc("Save task")), timeout))
-        capture(if (legacyService) "widget_task_editor_legacy.png" else "widget_task_editor.png")
+        capture(if (legacyService) "widget_task_editor/widget_task_editor_when_opened_from_legacy_widget.png" else "widget_task_editor/widget_task_editor_when_opened_from_widget.png")
         publishLegacyViews()
         device.pressHome()
         findWidgetTask("Pick up groceries").click()

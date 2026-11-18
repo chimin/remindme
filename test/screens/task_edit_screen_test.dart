@@ -71,7 +71,9 @@ void main() {
 
     await expectLater(
       find.byKey(boundaryKey),
-      matchesGoldenFile('golden/task_edit_screen.png'),
+      matchesGoldenFile(
+        '../../screenshots/task_edit_screen/task_edit_screen_when_displayed.png',
+      ),
     );
   });
 
@@ -152,7 +154,9 @@ void main() {
       expect(repo.deleted, isEmpty);
       await expectLater(
         find.byKey(const ValueKey('delete-editor-screen')),
-        matchesGoldenFile('golden/task_edit_screen_delete_confirmation.png'),
+        matchesGoldenFile(
+          '../../screenshots/task_edit_screen/task_edit_screen_when_delete_confirmation.png',
+        ),
       );
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
@@ -277,7 +281,9 @@ void main() {
       expect(find.text('Monthly'), findsOneWidget);
       await expectLater(
         find.byKey(const ValueKey('editor')),
-        matchesGoldenFile('golden/task_edit_screen_repeat.png'),
+        matchesGoldenFile(
+          '../../screenshots/task_edit_screen/task_edit_screen_when_repeat.png',
+        ),
       );
       await tester.tap(find.byTooltip('Save task'));
       await tester.pumpAndSettle();
@@ -437,72 +443,73 @@ void main() {
 
       await expectLater(
         find.byKey(const ValueKey('editor')),
-        matchesGoldenFile('golden/task_edit_screen_incomplete.png'),
+        matchesGoldenFile(
+          '../../screenshots/task_edit_screen/task_edit_screen_when_incomplete.png',
+        ),
       );
     },
   );
 
-  testWidgets(
-    'editor should prevent field changes when a completed task opens',
-    (tester) async {
-      final repo = RecordingTasksRepository();
-      await pumpEditor(
-        tester,
-        repo,
-        task: Task(
-          id: 'task',
-          title: 'Water plants',
-          notes: 'Keep soil moist',
-          due: '2030-01-01T00:00:00Z',
-          status: 'completed',
-        ),
-      );
-      expect(find.byTooltip('Save task'), findsNothing);
-      expect(find.byTooltip('Delete task'), findsOneWidget);
-      expect(find.text('Mark as incomplete'), findsOneWidget);
-      expect(find.text('View task'), findsOneWidget);
-      expect(find.text('This task is completed'), findsOneWidget);
-      expect(
-        tester
-            .getSize(find.byKey(const ValueKey('completed_task_badge')))
-            .width,
-        tester.getSize(find.byKey(const ValueKey('task_title'))).width,
-      );
-      expect(
-        tester
-            .widget<TextField>(
-              find.descendant(
-                of: find.byType(TextFormField),
-                matching: find.byType(TextField),
-              ),
-            )
-            .readOnly,
-        isTrue,
-      );
-      expect(
-        tester
-            .widget<TextField>(find.byKey(const ValueKey('task_notes')))
-            .readOnly,
-        isTrue,
-      );
-      expect(
-        tester
-            .widget<DropdownButtonFormField<String>>(
-              find.byType(DropdownButtonFormField<String>),
-            )
-            .onChanged,
-        isNull,
-      );
-      expect(find.byTooltip('Clear due date'), findsNothing);
-      await tester.tap(find.byKey(const ValueKey('due_date_field')));
-      await tester.pumpAndSettle();
-      expect(find.byType(DatePickerDialog), findsNothing);
-      await expectLater(
-        find.byKey(const ValueKey('editor')),
-        matchesGoldenFile('golden/task_edit_screen_completed.png'),
-      );
-    },
-  );
+  testWidgets('editor should prevent field changes when a completed task opens', (
+    tester,
+  ) async {
+    final repo = RecordingTasksRepository();
+    await pumpEditor(
+      tester,
+      repo,
+      task: Task(
+        id: 'task',
+        title: 'Water plants',
+        notes: 'Keep soil moist',
+        due: '2030-01-01T00:00:00Z',
+        status: 'completed',
+      ),
+    );
+    expect(find.byTooltip('Save task'), findsNothing);
+    expect(find.byTooltip('Delete task'), findsOneWidget);
+    expect(find.text('Mark as incomplete'), findsOneWidget);
+    expect(find.text('View task'), findsOneWidget);
+    expect(find.text('This task is completed'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('completed_task_badge'))).width,
+      tester.getSize(find.byKey(const ValueKey('task_title'))).width,
+    );
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.byType(TextFormField),
+              matching: find.byType(TextField),
+            ),
+          )
+          .readOnly,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('task_notes')))
+          .readOnly,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<DropdownButtonFormField<String>>(
+            find.byType(DropdownButtonFormField<String>),
+          )
+          .onChanged,
+      isNull,
+    );
+    expect(find.byTooltip('Clear due date'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('due_date_field')));
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsNothing);
+    await expectLater(
+      find.byKey(const ValueKey('editor')),
+      matchesGoldenFile(
+        '../../screenshots/task_edit_screen/task_edit_screen_when_completed.png',
+      ),
+    );
+  });
 
   testWidgets(
     'mark completed should save edited fields and return home when an incomplete task is submitted',

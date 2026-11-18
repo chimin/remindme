@@ -107,7 +107,7 @@ class TaskWidgetProviderTest {
       first.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
         View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY))
       first.layout(0, 0, 600, 800)
-      ScreenshotCapture.captureScreenshot("task_widget_updated_appearance.png",
+      ScreenshotCapture.captureScreenshot("task_widget/task_widget_when_appearance_is_updated.png",
         ScreenshotCapture.renderToBitmap(first), context)
     }
   }
@@ -156,7 +156,7 @@ class TaskWidgetProviderTest {
       view.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
         View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY))
       view.layout(0, 0, 600, 1000)
-      ScreenshotCapture.captureScreenshot("task_widget_categories.png",
+      ScreenshotCapture.captureScreenshot("task_widget/task_widget_when_categories_are_shown.png",
         ScreenshotCapture.renderToBitmap(view), context)
     }
   }

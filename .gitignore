@@ -50,9 +50,8 @@ app.*.map.json
 # Generated previews and temporary review artifacts
 /output/
 
-# Track the latest numbered Patrol screenshots and video for Git comparisons.
+# Track Patrol video for Git comparisons; screenshots live in screenshots/e2e.
 # Keep diagnostic logs and older run directories local.
 /patrol_test/golden/*
-!/patrol_test/golden/[0-9][0-9]_*.png
 !/patrol_test/golden/test.mp4
 /patrol_test/test_bundle.dart

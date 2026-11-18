@@ -186,8 +186,9 @@ exit code for reset, test, screenshot, or video-recording/collection failures.
 
 ### Screenshots, video, and failures
 
-Native screenshots (including Google's UI) and the continuous video always use
-**the same paths** in `patrol_test/golden/`, next to the test file:
+Patrol screenshots (including Google's UI) use **stable numbered paths**
+in `screenshots/e2e/`. Video and diagnostics remain
+in `patrol_test/golden/`:
 
 ```text
 01_login.png
@@ -205,8 +206,9 @@ Native screenshots (including Google's UI) and the continuous video always use
 13_sign_out_confirmation.png
 14_signed_out.png
 99_failure.png
-test.mp4
 ```
+
+The continuous video stays at `patrol_test/golden/test.mp4`.
 
 Each checkpoint keeps its sequence number across runs. Development warning
 captures are optional; `99_failure.png` is attempted if the test fails. These
@@ -310,8 +312,14 @@ ahead, and five days ahead, relative to the emulator's local date.
 
 The task captures the real task listing, add-task screen (keyboard hidden),
 and launcher with the real app widget. Files are pulled into
-`android/app/test/screenshots/`:
-`task_listing.png`, `add_task.png`, and `home_screen_widget.png`.
+`android/screenshots/<page/component>/`, using filenames such as
+`task_home_screen_when_four_dated_tasks_exist.png`,
+`task_edit_screen_when_adding_task.png`, and
+`home_screen_widget_when_four_dated_tasks_exist.png`.
+
+Flutter golden images live in `screenshots/<page/component>/`. Flutter and Android
+screenshot filenames follow `<page/component>_when_<what_happen>.png`. Patrol
+screenshots live in `screenshots/e2e/` and use `<2_digits_sequence>_<description>.png`.
 
 Use an English, unlocked emulator with a launcher supporting widget pinning.
 Keep the widget on the current home page. The default AVD is `RemindMe_Test`;

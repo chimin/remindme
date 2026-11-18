@@ -143,7 +143,9 @@ void main() {
       expect(repo.refreshes.where((id) => id == 'b'), isEmpty);
       await expectLater(
         find.byType(MaterialApp),
-        matchesGoldenFile('golden/widget_task_editor.png'),
+        matchesGoldenFile(
+          '../../screenshots/widget_task_editor/widget_task_editor_when_displayed.png',
+        ),
       );
     },
   );

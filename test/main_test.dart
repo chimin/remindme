@@ -65,7 +65,7 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       await expectLater(
         find.byType(MaterialApp),
-        matchesGoldenFile('golden/startup_loading.png'),
+        matchesGoldenFile('../screenshots/startup/startup_when_loading.png'),
       );
       auth.ready.complete();
       await tester.pumpAndSettle();
@@ -97,7 +97,7 @@ void main() {
       );
       await expectLater(
         find.byType(MaterialApp),
-        matchesGoldenFile('golden/startup_error.png'),
+        matchesGoldenFile('../screenshots/startup/startup_when_error.png'),
       );
       await tester.tap(find.text('Retry'));
       await tester.pumpAndSettle();

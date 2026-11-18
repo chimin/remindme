@@ -38,7 +38,7 @@ class TaskWidgetScreenshotTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val view = LayoutInflater.from(context).inflate(R.layout.task_widget, null, false)
         val bitmap = renderView(view, 400, 600)
-        ScreenshotCapture.captureScreenshot("task_widget_empty_state.png", bitmap, context)
+        ScreenshotCapture.captureScreenshot("task_widget/task_widget_when_empty.png", bitmap, context)
     }
 
     @Test
@@ -115,6 +115,6 @@ class TaskWidgetScreenshotTest {
         emptyView.visibility = View.GONE
 
         val bitmap = renderView(view, 400, 600)
-        ScreenshotCapture.captureScreenshot("task_widget_populated.png", bitmap, context)
+        ScreenshotCapture.captureScreenshot("task_widget/task_widget_when_populated.png", bitmap, context)
     }
 }

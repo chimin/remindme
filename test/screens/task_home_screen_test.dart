@@ -109,7 +109,9 @@ void main() {
     expect(repo.deleted, isEmpty);
     await expectLater(
       find.byType(MaterialApp),
-      matchesGoldenFile('golden/task_home_screen_delete_confirmation.png'),
+      matchesGoldenFile(
+        '../../screenshots/task_home_screen/task_home_screen_when_delete_confirmation.png',
+      ),
     );
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
@@ -176,7 +178,9 @@ void main() {
         if (!empty) {
           await expectLater(
             find.byType(MaterialApp),
-            matchesGoldenFile('golden/task_home_screen_cached_startup.png'),
+            matchesGoldenFile(
+              '../../screenshots/task_home_screen/task_home_screen_when_cached_startup.png',
+            ),
           );
         }
         repo.lists.completeError(StateError('metadata offline'));
@@ -320,7 +324,9 @@ void main() {
         expect(tester.takeException(), isNull);
         await expectLater(
           find.byType(MaterialApp),
-          matchesGoldenFile('golden/task_home_screen_$variant.png'),
+          matchesGoldenFile(
+            '../../screenshots/task_home_screen/task_home_screen_when_$variant.png',
+          ),
         );
       },
     );
@@ -438,7 +444,7 @@ void main() {
       final screenshot = await captureAndCompare(
         tester,
         find.byType(MaterialApp),
-        'test/screens/golden/task_home_screen_delete_progress_popup.png',
+        'screenshots/task_home_screen/task_home_screen_when_delete_progress_popup.png',
         'Delete completed tasks progress',
       );
       expect(screenshot['pass'], isTrue);
@@ -710,7 +716,9 @@ void main() {
       expect(mock.showCompleted, isFalse);
       await expectLater(
         find.byType(MaterialApp),
-        matchesGoldenFile('golden/task_home_screen_completed.png'),
+        matchesGoldenFile(
+          '../../screenshots/task_home_screen/task_home_screen_when_completed.png',
+        ),
       );
     },
   );
@@ -1291,7 +1299,9 @@ void main() {
       expect(find.text('Delete 1 task'), findsOneWidget);
       await expectLater(
         find.byType(MaterialApp),
-        matchesGoldenFile('golden/delete_completed_tasks_dialog.png'),
+        matchesGoldenFile(
+          '../../screenshots/delete_completed_tasks_dialog/delete_completed_tasks_dialog_when_displayed.png',
+        ),
       );
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();

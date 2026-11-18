@@ -58,7 +58,9 @@ void main() {
         'notes.txt',
         'reference.png',
       ]) {
-        await File('${output.path}/$name').writeAsString('previous run');
+        final file = File('${output.path}/$name');
+        await file.parent.create(recursive: true);
+        await file.writeAsString('previous run');
       }
       final history = Directory('${output.path}/123')..createSync();
       await File('${history.path}/test.mp4').writeAsString('history');
@@ -88,12 +90,22 @@ void main() {
         '$_remoteRoot/nested/1100_42_04_tasks_consent.png',
         '$_remoteRoot/nested/1200_42_99_failure.png',
       ]);
-      await File('${output.path}/01_login.png').writeAsString('old login');
+      final oldLogin = File('${output.path}/01_login.png');
+      await oldLogin.parent.create(recursive: true);
+      await oldLogin.writeAsString('old login');
 
       await collectPatrolScreenshots(device.run, output, '42');
 
       expect(
-        output.listSync().map((file) => file.uri.pathSegments.last).toSet(),
+        output
+            .listSync(recursive: true)
+            .whereType<File>()
+            .map(
+              (file) => file.path
+                  .substring(output.path.length + 1)
+                  .replaceAll('\\', '/'),
+            )
+            .toSet(),
         {'01_login.png', '04_tasks_consent.png', '99_failure.png'},
       );
       expect(
@@ -150,6 +162,39 @@ void main() {
       expect(device.pulled, hasLength(3));
       expect(await File('${output.path}/06_home.png').exists(), isTrue);
       expect(await File('${output.path}/14_signed_out.png').exists(), isFalse);
+    },
+  );
+
+  test(
+    'collect screenshots should preserve other baselines when diagnostics and screenshots use separate directories',
+    () async {
+      final screenshots = Directory('${output.path}/screenshots/e2e');
+      final baseline = File(
+        '${output.path}/screenshots/login_screen/login_screen_when_displayed.png',
+      );
+      final capture = File('${screenshots.path}/01_login.png');
+      await baseline.parent.create(recursive: true);
+      await capture.parent.create(recursive: true);
+      await baseline.writeAsString('native baseline');
+      await capture.writeAsString('stale patrol capture');
+      await File('${output.path}/device.log').writeAsString('stale log');
+
+      preparePatrolArtifacts(output, screenshots: screenshots);
+
+      expect(await baseline.readAsString(), 'native baseline');
+      expect(await capture.exists(), isFalse);
+      expect(await File('${output.path}/device.log').exists(), isFalse);
+      final device = _ScreenshotDevice(['$_remoteRoot/1000_42_01_login.png']);
+      await collectPatrolScreenshots(
+        device.run,
+        output,
+        '42',
+        screenshots: screenshots,
+      );
+
+      expect(await baseline.readAsString(), 'native baseline');
+      expect(await capture.readAsString(), endsWith('1000_42_01_login.png'));
+      expect(await File('${output.path}/01_login.png').exists(), isFalse);
     },
   );
 
