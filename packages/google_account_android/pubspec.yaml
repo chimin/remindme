@@ -1,0 +1,15 @@
+name: google_account_android
+description: Android account selection and Google Tasks authorization for Remind Me.
+version: 1.0.0
+publish_to: none
+environment:
+  sdk: ^3.11.1
+dependencies:
+  flutter:
+    sdk: flutter
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: chimin.remindme.google_account
+        pluginClass: GoogleAccountPlugin

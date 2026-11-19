@@ -3,3 +3,6 @@ String getGoogleWebClientId() {
   if (fromEnv.isNotEmpty) return fromEnv;
   return '';
 }
+
+String getGoogleIosClientId() =>
+    const String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');

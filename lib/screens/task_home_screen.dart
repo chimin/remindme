@@ -634,6 +634,45 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
           ),
         ],
       ),
+      bottomNavigationBar: repo.requiresReconnect || repo.syncPending
+          ? SafeArea(
+              child: MaterialBanner(
+                forceActionsBelow: true,
+                content: Text(
+                  repo.requiresReconnect
+                      ? 'Please sign in again${repo.userEmail == null ? '' : ' (${repo.userEmail})'}. Your tasks are saved on this device.'
+                      : 'Saved locally; waiting to sync.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: repo.signingIn
+                        ? null
+                        : () async {
+                            try {
+                              if (repo.requiresReconnect) {
+                                await repo.requestAuthorization();
+                              } else if (repo.selectedTasklistId != null) {
+                                await repo.refreshTasks(
+                                  repo.selectedTasklistId!,
+                                );
+                              }
+                            } catch (_) {
+                              /* Saved tasks remain available. */
+                            }
+                            if (context.mounted && repo.authError != null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(repo.authError!)),
+                              );
+                            }
+                          },
+                    child: Text(
+                      repo.requiresReconnect ? 'Sign in' : 'Retry sync',
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : null,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(

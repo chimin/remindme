@@ -1,28 +1,69 @@
 import 'dart:async';
+import 'dart:ui';
+import 'package:flutter/widgets.dart';
 
 import 'package:workmanager/workmanager.dart';
 
 import 'tasks_repository.dart';
+import 'google_account_provider.dart';
+import 'task_storage_lease.dart';
+import 'widget_service.dart';
 import '../utils/log.dart';
 
 /// Name of the recurring background sync task.
 const String _kSyncTask = 'remindme_sync';
 
-/// The SyncService instance used by the top-level [callbackDispatcher].
-SyncService? _syncServiceInstance;
-
-/// Top-level entry point invoked by the workmanager plugin on Android/iOS
-/// whenever a scheduled background task is due.
 @pragma('vm:entry-point')
 void callbackDispatcher() {
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
   Workmanager().executeTask((taskName, inputData) async {
-    switch (taskName) {
-      case _kSyncTask:
-        await _syncServiceInstance?._runSync();
-        break;
-    }
-    return Future.value(true);
+    if (taskName != _kSyncTask) return true;
+    return runBackgroundSync();
   });
+}
+
+Future<bool> runBackgroundSync({
+  TaskStorageLease? storageLease,
+  TasksRepository Function(TaskStorageLease lease)? repositoryFactory,
+}) async {
+  final lease = storageLease ?? TaskStorageLease();
+  if (!await lease.acquire(wait: false)) return false;
+  TasksRepository? repository;
+  try {
+    repository =
+        repositoryFactory?.call(lease) ?? TasksRepository(storageLease: lease);
+    await repository.init();
+    if (!repository.initialized || repository.initializationError != null) {
+      return false;
+    }
+    if (!repository.hasLinkedAccount || repository.requiresReconnect) {
+      return true;
+    }
+    final id = repository.selectedTasklistId;
+    if (id == null) return true;
+    await SyncService(repository).sync(tasklistId: id);
+    final lists = repository.cachedTaskLists.where((list) => list.id == id);
+    await WidgetService.updateWidget(
+      await repository.getCachedTasks(id),
+      taskListId: id,
+      taskListName: lists.isEmpty ? 'Tasks' : lists.first.title,
+    );
+    return true;
+  } on AccountException catch (error) {
+    return error.reason == AccountFailure.interactionRequired ||
+        error.reason == AccountFailure.mismatch;
+  } catch (error, stack) {
+    logError('Background sync deferred', error, stack);
+    return false;
+  } finally {
+    try {
+      await repository?.close();
+    } finally {
+      repository?.dispose();
+      lease.release();
+    }
+  }
 }
 
 /// Orchestrates background sync between the local Hive cache and Google Tasks.
@@ -39,12 +80,12 @@ class SyncService {
   ///
   /// Must be called after [WidgetsFlutterBinding.ensureInitialized].
   Future<void> init() async {
-    _syncServiceInstance = this;
     await Workmanager().initialize(callbackDispatcher);
     await Workmanager().registerPeriodicTask(
       _kSyncTask,
       _kSyncTask,
       frequency: const Duration(hours: 24),
+      constraints: Constraints(networkType: NetworkType.connected),
     );
   }
 
@@ -75,6 +116,7 @@ class SyncService {
   Future<void> _performSync(String id) async {
     // --- Push: local dirty changes -> remote ---
     final entries = await _repository.getCacheEntries(id);
+    Object? pushError;
     for (final entry in entries) {
       if (!entry.dirty) continue;
       try {
@@ -87,6 +129,12 @@ class SyncService {
           await _repository.pushUpdate(id, entry);
         }
       } catch (e, st) {
+        if (e is AccountException &&
+            (e.reason == AccountFailure.interactionRequired ||
+                e.reason == AccountFailure.mismatch)) {
+          rethrow;
+        }
+        pushError ??= e;
         logError('Failed to push ${entry.localId ?? entry.id}', e, st);
         // Entry stays dirty for the next sync attempt.
       }
@@ -94,5 +142,7 @@ class SyncService {
 
     // --- Pull: remote -> local (last-write-wins merge) ---
     await _repository.pullFromRemote(id);
+    if (pushError != null) throw pushError;
+    _repository.markSynchronized();
   }
 }

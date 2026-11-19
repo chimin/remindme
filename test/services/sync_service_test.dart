@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:remindme/services/task_storage_lease.dart';
+import 'package:remindme/services/google_account_provider.dart';
 
 import 'package:remindme/services/sync_service.dart';
 import 'package:remindme/services/tasks_repository.dart';
@@ -50,7 +52,95 @@ class FakeRepo extends TasksRepository {
   }
 }
 
+class _WorkerRepository extends FakeRepo {
+  _WorkerRepository(this.lease);
+  final TaskStorageLease lease;
+  bool linked = true;
+  bool reconnect = false;
+  bool closed = false;
+  Object? failure;
+  @override
+  bool get hasLinkedAccount => linked;
+  @override
+  bool get requiresReconnect => reconnect;
+  @override
+  Future<void> init() async {
+    initialized = true;
+  }
+
+  @override
+  Future<void> pullFromRemote(String id) async {
+    if (failure != null) throw failure!;
+    await super.pullFromRemote(id);
+  }
+
+  @override
+  Future<void> close() async {
+    closed = true;
+    lease.release();
+  }
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'background sync should defer without creating a repository when foreground storage is owned',
+    () async {
+      final foreground = TaskStorageLease();
+      await foreground.acquire();
+      var created = false;
+      try {
+        expect(
+          await runBackgroundSync(
+            repositoryFactory: (lease) {
+              created = true;
+              return _WorkerRepository(lease);
+            },
+          ),
+          isFalse,
+        );
+        expect(created, isFalse);
+      } finally {
+        foreground.release();
+      }
+    },
+  );
+  test(
+    'background sync should release storage when no account is linked',
+    () async {
+      late _WorkerRepository repository;
+      expect(
+        await runBackgroundSync(
+          repositoryFactory: (lease) =>
+              repository = _WorkerRepository(lease)..linked = false,
+        ),
+        isTrue,
+      );
+      expect(repository.closed, isTrue);
+      expect(repository.pulled, isFalse);
+      final lease = TaskStorageLease();
+      expect(await lease.acquire(wait: false), isTrue);
+      lease.release();
+    },
+  );
+  test(
+    'background sync should avoid retrying consent when interaction is required',
+    () async {
+      late _WorkerRepository repository;
+      expect(
+        await runBackgroundSync(
+          repositoryFactory: (lease) => repository = _WorkerRepository(lease)
+            ..failure = const AccountException(
+              AccountFailure.interactionRequired,
+              'Reconnect',
+            ),
+        ),
+        isTrue,
+      );
+      expect(repository.closed, isTrue);
+    },
+  );
+
   test(
     'sync should share one push and pull when refresh requests overlap',
     () async {

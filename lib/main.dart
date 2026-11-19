@@ -20,6 +20,7 @@ Future<void> startApp({AuthRepository? authRepository}) async {
   final repo = TasksRepository(authRepository: authRepository);
   final syncService = SyncService(repo);
 
+  repo.onSignedIn = syncService.syncOnSignIn;
   repo.onRefreshTasks = (id) => syncService.sync(tasklistId: id);
   runApp(ChangeNotifierProvider.value(value: repo, child: const MyApp()));
 
@@ -71,6 +72,9 @@ class AuthRouter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final repo = context.watch<TasksRepository>();
+    if (repo.changingAccount) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     if (!repo.initialized) {
       return Scaffold(
         body: Center(
@@ -90,7 +94,7 @@ class AuthRouter extends StatelessWidget {
         ),
       );
     }
-    if (!repo.signedIn) {
+    if (!repo.hasLinkedAccount) {
       return const LoginScreen();
     }
     return const TaskHomeScreen();

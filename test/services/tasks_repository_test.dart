@@ -6,14 +6,14 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
+import 'package:remindme/services/google_account_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:googleapis/tasks/v1.dart';
 
 import 'package:remindme/services/tasks_repository.dart';
 import 'package:remindme/services/auth_repository.dart';
 
-import '../support/fake_google_platform.dart';
+import '../support/fake_account_provider.dart';
 import 'package:remindme/services/sync_service.dart';
 import 'package:remindme/models/task_metadata.dart';
 
@@ -21,15 +21,14 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   group('recurring tasks', () {
     late TasksRepository repo;
-    late FakeGooglePlatform platform;
+    late AuthRepository auth;
     late Directory cache;
     late FakeTasksServer server;
     late DateTime due;
 
     setUp(() async {
-      platform = FakeGooglePlatform();
-      GoogleSignInPlatform.instance = platform;
-      repo = TasksRepository();
+      auth = AuthRepository(provider: FakeAccountProvider());
+      repo = TasksRepository(authRepository: auth);
       cache = await Directory.systemTemp.createTemp('remindme_recurrence_');
       SharedPreferences.setMockInitialValues({'remindme_tasklist_id': 'list'});
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -58,7 +57,7 @@ void main() {
     });
     tearDown(() async {
       repo.dispose();
-      await platform.events.close();
+      auth.dispose();
       await Hive.close();
       await cache.delete(recursive: true);
     });
@@ -196,21 +195,17 @@ void main() {
       'sync should recover both writes when completion was saved offline before restart',
       () => run(() async {
         server.offline = true;
-        await expectLater(
-          repo.completeTask('list', 'old', true),
-          throwsA(isA<SocketException>()),
-        );
+        await repo.completeTask('list', 'old', true);
         final pending = await repo.getCacheEntries('list');
         expect(pending, hasLength(2));
         expect(pending.every((e) => e.dirty), isTrue);
         expect(server.creates, 0);
         final plannedDue = pending.singleWhere((e) => e.id == null).due;
         repo.dispose();
-        await platform.events.close();
-        platform = FakeGooglePlatform();
-        GoogleSignInPlatform.instance = platform;
+        auth.dispose();
+        auth = AuthRepository(provider: FakeAccountProvider());
         await Hive.close();
-        repo = TasksRepository();
+        repo = TasksRepository(authRepository: auth);
         await repo.init();
         await repo.signIn();
         server.offline = false;
@@ -227,10 +222,7 @@ void main() {
       'sync should reconcile the existing clone when create response is lost',
       () => run(() async {
         server.loseCreateResponse = true;
-        await expectLater(
-          repo.completeTask('list', 'old', true),
-          throwsA(isA<SocketException>()),
-        );
+        await repo.completeTask('list', 'old', true);
         expect(server.creates, 1);
         final pending = (await repo.getCacheEntries(
           'list',
@@ -308,161 +300,222 @@ void main() {
       }),
     );
   });
-  group('sign out', () {
-    late FakeGooglePlatform platform;
+  group('account connection', () {
     late TasksRepository repo;
+    late AuthRepository auth;
+    late FakeAccountProvider provider;
     late Directory cache;
-    final widgetCalls = <MethodCall>[];
-    const widgetChannel = MethodChannel('home_widget');
-
     setUp(() async {
-      platform = FakeGooglePlatform();
-      GoogleSignInPlatform.instance = platform;
-      repo = TasksRepository();
-      cache = await Directory.systemTemp.createTemp('remindme_signout_');
-      SharedPreferences.setMockInitialValues({
-        'remindme_tasklist_id': 'list',
-        'remindme_show_completed': false,
-      });
-      final messenger =
-          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-      messenger.setMockMethodCallHandler(
-        const MethodChannel('plugins.flutter.io/path_provider'),
-        (_) async => cache.path,
-      );
-      widgetCalls.clear();
-      messenger.setMockMethodCallHandler(widgetChannel, (call) async {
-        widgetCalls.add(call);
-        return true;
-      });
-      await repo.init();
-      await repo.signIn();
-      for (final list in ['list', 'other']) {
-        await repo.saveCacheEntries(list, [
-          CachedTask(
-            id: 'private',
-            tasklistId: list,
-            title: 'Private task',
-            updatedAt: 1,
-          ),
-        ]);
-      }
+      SharedPreferences.setMockInitialValues({});
+      cache = await Directory.systemTemp.createTemp('remindme_connection_');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('plugins.flutter.io/path_provider'),
+            (_) async => cache.path,
+          );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('home_widget'),
+            (_) async => true,
+          );
+      provider = FakeAccountProvider();
+      auth = AuthRepository(provider: provider);
+      repo = TasksRepository(authRepository: auth);
     });
-
     tearDown(() async {
+      await repo.close();
       repo.dispose();
-      await platform.events.close();
+      auth.dispose();
       await Hive.close();
       await cache.delete(recursive: true);
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(widgetChannel, null);
     });
-
-    Future<void> expectCleared() async {
-      expect(repo.signedIn, isFalse);
-      expect(repo.selectedTasklistId, isNull);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('remindme_tasklist_id'), isNull);
-      expect(prefs.getBool('remindme_sign_in_succeeded'), isFalse);
-      expect(prefs.getBool('remindme_show_completed'), isFalse);
-      expect(
-        widgetCalls.map((call) => call.method),
-        containsAll(['saveWidgetData', 'updateWidget']),
-      );
-      expect(widgetCalls.first.arguments['data'], isNull);
-      await Hive.close();
-      final box = await Hive.openBox('remindme_tasks_cache');
-      expect(box.isEmpty, isTrue);
-    }
-
     test(
-      'sign out should clear all persisted tasks when user signs out',
-      () async {
-        await repo.signOut();
-        await expectCleared();
-      },
-    );
-
-    test('sign out should clear local data when disconnect fails', () async {
-      platform.disconnectError = StateError('offline');
-      await expectLater(repo.signOut(), throwsStateError);
-      await expectCleared();
-    });
-
-    test(
-      'sign out should clear late task data when a refresh is in flight',
-      () async {
-        final started = Completer<void>();
-        final response = Completer<http.Response>();
-        await http.runWithClient(
-          () async {
-            await repo.signIn();
-            final refresh = repo.pullFromRemote('list');
-            await started.future;
-            final signOut = repo.signOut();
-            response.complete(
-              http.Response(
-                '{"items":[{"id":"late","title":"Late task"}]}',
-                200,
-                headers: {'content-type': 'application/json'},
-              ),
-            );
-            await refresh;
-            await signOut;
-          },
-          () => MockClient((_) {
-            started.complete();
-            return response.future;
-          }),
-        );
-        await expectCleared();
-      },
-    );
-  });
-  group('authentication integration', () {
-    late TasksRepository repo;
-    late FakeGooglePlatform platform;
-    setUp(() {
-      platform = FakeGooglePlatform();
-      GoogleSignInPlatform.instance = platform;
-      SharedPreferences.setMockInitialValues({});
-      repo = TasksRepository();
-    });
-    tearDown(() async {
-      repo.dispose();
-      await platform.events.close();
-    });
-    Future<bool?> savedSuccess() async =>
-        (await SharedPreferences.getInstance()).getBool(
-          'remindme_sign_in_succeeded',
-        );
-    test(
-      'API request should return to sign in when credentials expire',
+      'API request should preserve cached access when refreshed credentials are rejected',
       () async {
         var requests = 0;
         await http.runWithClient(
           () async {
+            await repo.init();
             await repo.signIn();
             await expectLater(
               repo.getTaskLists(),
-              throwsA(isA<DetailedApiRequestError>()),
+              throwsA(isA<AccountException>()),
             );
           },
-          () => MockClient((request) async {
+          () => MockClient((_) async {
             requests++;
             return http.Response(
               '{"error":{"code":401,"message":"expired"}}',
               401,
+            );
+          }),
+        );
+        expect(requests, 2);
+        expect(repo.signedIn, isTrue);
+        expect(repo.requiresReconnect, isTrue);
+        expect(provider.forgets, 0);
+      },
+    );
+    test(
+      'sign out should clear pending tasks when the user disconnects',
+      () async {
+        await repo.init();
+        await repo.signIn();
+        await repo.selectTasklist('list');
+        await repo.saveCacheEntries('list', [
+          CachedTask(
+            id: null,
+            tasklistId: 'legacy',
+            localId: 'pending',
+            title: 'Private',
+            updatedAt: 1,
+            dirty: true,
+          ),
+        ]);
+        provider.forgetError = StateError('offline');
+        await repo.signOut();
+        expect(repo.hasLinkedAccount, isFalse);
+        expect(repo.selectedTasklistId, isNull);
+        expect(await repo.getCacheEntries('list'), isEmpty);
+        expect(
+          (await SharedPreferences.getInstance()).getString(
+            AuthRepository.accountPreference,
+          ),
+          isNull,
+        );
+      },
+    );
+    test(
+      'create task should remain editable and deletable when Google is offline',
+      () async {
+        await http.runWithClient(
+          () async {
+            await repo.init();
+            await repo.signIn();
+            final created = await repo.createTask('list', title: 'Offline');
+            expect(created.id, startsWith('local-'));
+            await repo.updateTask('list', created.id!, title: 'Edited offline');
+            expect(
+              (await repo.getCachedTasks('list')).single.title,
+              'Edited offline',
+            );
+            await repo.completeTask('list', created.id!, true);
+            expect(
+              (await repo.getCachedTasks('list')).single.status,
+              'completed',
+            );
+            expect(repo.syncPending, isTrue);
+            await repo.deleteTask('list', created.id!);
+            expect(await repo.getCacheEntries('list'), isEmpty);
+          },
+          () => MockClient((_) async => throw const SocketException('offline')),
+        );
+      },
+    );
+    test(
+      'edit task should resolve its server identity when an offline editor remains open during sync',
+      () async {
+        var offline = true;
+        var row = <String, dynamic>{
+          'id': 'server',
+          'title': 'Offline',
+          'status': 'needsAction',
+          'updated': DateTime.now().toUtc().toIso8601String(),
+        };
+        final paths = <String>[];
+        await http.runWithClient(
+          () async {
+            await repo.init();
+            await repo.signIn();
+            final local = await repo.createTask('list', title: 'Offline');
+            offline = false;
+            await repo.pushCreate(
+              'list',
+              (await repo.getCacheEntries('list')).single,
+            );
+            await repo.pullFromRemote('list');
+            await repo.updateTask(
+              'list',
+              local.id!,
+              title: 'Edited after sync',
+            );
+            expect(
+              (await repo.getCachedTasks('list')).single.title,
+              'Edited after sync',
+            );
+            await repo.deleteTask('list', local.id!);
+            expect(await repo.getCacheEntries('list'), isEmpty);
+          },
+          () => MockClient((request) async {
+            if (offline) throw const SocketException('offline');
+            paths.add('${request.method} ${request.url.pathSegments.last}');
+            if (request.method == 'DELETE') return http.Response('', 204);
+            if (request.method == 'GET') {
+              return http.Response(
+                jsonEncode({
+                  'items': [row],
+                }),
+                200,
+                headers: {'content-type': 'application/json'},
+              );
+            }
+            row = {...row, ...jsonDecode(request.body) as Map<String, dynamic>};
+            return http.Response(
+              jsonEncode(row),
+              200,
               headers: {'content-type': 'application/json'},
             );
           }),
         );
-        expect(requests, 1);
-        expect(repo.signedIn, isFalse);
-        expect(repo.signingIn, isFalse);
-        expect(repo.authError, contains('expired'));
-        expect(await savedSuccess(), isFalse);
-        expect(platform.signOutCalls, 2);
+        expect(paths, containsAllInOrder(['PATCH server', 'DELETE server']));
+      },
+    );
+
+    test(
+      'link should retain legacy pending tasks when the selected account does not own their list',
+      () async {
+        await repo.init();
+        await repo.selectTasklist('legacy');
+        await repo.saveCacheEntries('legacy', [
+          CachedTask(
+            id: null,
+            tasklistId: 'legacy',
+            localId: 'pending',
+            title: 'Private',
+            updatedAt: 1,
+            dirty: true,
+          ),
+        ]);
+        await http.runWithClient(
+          () => repo.signIn(),
+          () => MockClient((_) async => http.Response('', 404)),
+        );
+        expect(repo.hasLinkedAccount, isFalse);
+        expect((await repo.getCacheEntries('legacy')).single.title, 'Private');
+        expect(repo.authError, contains('owns your saved task list'));
+      },
+    );
+    test(
+      'link should adopt the cache when the selected account owns its legacy list',
+      () async {
+        await repo.init();
+        await repo.selectTasklist('legacy');
+        await repo.saveCacheEntries('legacy', [
+          CachedTask(
+            id: null,
+            tasklistId: 'legacy',
+            localId: 'pending',
+            title: 'Private',
+            updatedAt: 1,
+            dirty: true,
+          ),
+        ]);
+        await http.runWithClient(
+          () => repo.signIn(),
+          () => MockClient((_) async => http.Response('{"id":"legacy"}', 200)),
+        );
+        expect(repo.hasLinkedAccount, isTrue);
+        expect((await repo.getCacheEntries('legacy')).single.dirty, isTrue);
       },
     );
   });

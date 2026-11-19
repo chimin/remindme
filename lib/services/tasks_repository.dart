@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 import 'package:hive_flutter/hive_flutter.dart';
@@ -10,6 +11,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/task_metadata.dart';
 import '../utils/log.dart';
 import 'auth_repository.dart';
+import 'google_account_provider.dart';
+import 'task_storage_lease.dart';
 import 'widget_service.dart';
 
 /// Parses a Google Tasks `updated` RFC-3339 string to milliseconds since the
@@ -46,7 +49,7 @@ class CachedTask {
   final String? id;
   final String tasklistId;
 
-  /// Client-generated id for a pending local create.
+  /// Stable client identity retained after upload for open offline editors.
   final String? localId;
   final String? title;
   final String? notes;
@@ -68,6 +71,7 @@ class CachedTask {
 
   CachedTask copyWith({
     String? id,
+    String? localId,
     String? title,
     String? notes,
     String? status,
@@ -83,7 +87,7 @@ class CachedTask {
     return CachedTask(
       id: id ?? this.id,
       tasklistId: tasklistId,
-      localId: localId,
+      localId: localId ?? this.localId,
       title: title ?? this.title,
       notes: notes ?? this.notes,
       status: status ?? this.status,
@@ -152,7 +156,7 @@ class CachedTask {
 
   /// Converts this cache entry to a Google [Task] for API calls / display.
   Task toTask() => Task(
-    id: id,
+    id: id ?? localId,
     title: title,
     notes: notes,
     status: status,
@@ -202,7 +206,7 @@ List<CachedTask> mergeTasks(
       var winner = CachedTask.fromTask(
         r,
         tasklistId,
-      ).copyWith(updatedAt: remoteMs, dirty: false);
+      ).copyWith(updatedAt: remoteMs, dirty: false, localId: existing.localId);
       // Preserve a locally-requested deletion when it is newer than remote.
       if (existing.isDeleted && (existing.updatedAt ?? 0) > remoteMs) {
         winner = winner.copyWith(isDeleted: true);
@@ -227,15 +231,24 @@ List<CachedTask> mergeTasks(
 }
 
 class TasksRepository extends ChangeNotifier {
-  TasksRepository({AuthRepository? authRepository})
-    : _auth = authRepository ?? AuthRepository(),
-      _ownsAuth = authRepository == null {
+  TasksRepository({
+    AuthRepository? authRepository,
+    TaskStorageLease? storageLease,
+  }) : _auth = authRepository ?? AuthRepository(),
+       _ownsAuth = authRepository == null,
+       _storageLease = storageLease ?? TaskStorageLease() {
+    _auth.validateAccount = _validateAccount;
     _auth.addListener(_handleAuthChanged);
     _updateTasksApi();
   }
 
   final AuthRepository _auth;
   final bool _ownsAuth;
+  final TaskStorageLease _storageLease;
+  bool syncPending = false;
+  bool get requiresReconnect => _auth.requiresReconnect;
+  bool get hasLinkedAccount => signedIn;
+  bool get changingAccount => _signingOut;
   http.Client? _apiClient;
   TasksApi? _tasksApi;
   Box? _cacheBox;
@@ -284,7 +297,9 @@ class TasksRepository extends ChangeNotifier {
     initializationError = null;
     if (!_disposed) notifyListeners();
     try {
+      await _storageLease.acquire();
       final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
       _selectedTasklistId = prefs.getString(_kPrefKey);
       _showCompleted = prefs.getBool(_kShowCompletedPrefKey) ?? true;
       final savedLists = prefs.getString(_kTaskListsPrefKey);
@@ -302,7 +317,14 @@ class TasksRepository extends ChangeNotifier {
       await _auth.init();
       // Login has no use for the task box. Open it only for an authenticated
       // session; all task reads/writes also guard cache readiness.
-      if (signedIn) await _ensureCache();
+      if (signedIn) {
+        await _ensureCache();
+        syncPending = _cacheBox!.values.any(
+          (value) =>
+              value is List &&
+              value.any((entry) => entry is Map && entry['dirty'] == true),
+        );
+      }
       initialized = true;
     } catch (error, stack) {
       initializationError = 'Unable to initialize local data';
@@ -319,6 +341,7 @@ class TasksRepository extends ChangeNotifier {
   }
 
   Future<void> _openCache() async {
+    await _storageLease.acquire();
     await Hive.initFlutter();
     _cacheBox = await Hive.openBox(_kCacheBox);
   }
@@ -329,34 +352,103 @@ class TasksRepository extends ChangeNotifier {
 
   Future<void> requestAuthorization() => _auth.requestAuthorization();
 
-  Future<void> signOut() async {
-    _signingOut = true;
-    _selectedTasklistId = null;
+  Future<void> _validateAccount(
+    GoogleAccountAuthorization authorization,
+  ) async {
+    if (signedIn) return;
+    await _ensureCache();
+    if (_cacheBox!.isEmpty && _taskLists.isEmpty) return;
+    final ids = <String>{
+      ?_selectedTasklistId,
+      ..._taskLists.map((list) => list.id).whereType<String>(),
+      ..._cacheBox!.keys
+          .whereType<String>()
+          .where((key) => key.startsWith('tasks_'))
+          .map((key) => key.substring(6)),
+    };
+    final client = http.Client();
     try {
-      await _auth.signOut();
-    } finally {
-      try {
-        // Let pending task operations finish before deleting their cached data.
-        await _withTaskLock(() async {
-          await _ensureCache();
-          await _cacheBox!.clear();
-          _taskLists = [];
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.remove(_kPrefKey);
-          await prefs.remove(_kTaskListsPrefKey);
-        });
-      } finally {
-        await WidgetService.clearWidget();
-        _signingOut = false;
-        if (!_disposed) notifyListeners();
+      for (final id in ids) {
+        final response = await client
+            .get(
+              Uri.https(
+                'tasks.googleapis.com',
+                '/tasks/v1/users/@me/lists/$id',
+              ),
+              headers: {'Authorization': 'Bearer ${authorization.accessToken}'},
+            )
+            .timeout(const Duration(seconds: 30));
+        if (response.statusCode == 403 || response.statusCode == 404) {
+          throw const AccountException(
+            AccountFailure.mismatch,
+            'Choose the account that owns your saved task list, or sign out to discard saved tasks.',
+          );
+        }
+        if (response.statusCode != 200) {
+          throw const AccountException(
+            AccountFailure.temporary,
+            'Unable to verify the account for your saved tasks. Please retry online.',
+          );
+        }
       }
+    } finally {
+      client.close();
+    }
+  }
+
+  bool _defer(Object error) {
+    final deferred =
+        error is SocketException ||
+        error is TimeoutException ||
+        error is http.ClientException ||
+        (error is AccountException &&
+            (error.reason == AccountFailure.interactionRequired ||
+                error.reason == AccountFailure.temporary));
+    if (deferred) {
+      syncPending = true;
+      if (!_disposed) notifyListeners();
+    }
+    return deferred;
+  }
+
+  void markSynchronized() {
+    syncPending = false;
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> signOut() async {
+    if (_signingOut) return;
+    _signingOut = true;
+    notifyListeners();
+    try {
+      await _withTaskLock(() async {
+        await _auth.signOut();
+        await _ensureCache();
+        await _cacheBox!.clear();
+        _selectedTasklistId = null;
+        _taskLists = [];
+        syncPending = false;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_kPrefKey);
+        await prefs.remove(_kTaskListsPrefKey);
+      }, changingAccount: true);
+      await WidgetService.clearWidget();
+    } finally {
+      _signingOut = false;
+      if (!_disposed) notifyListeners();
     }
   }
 
   // Keep cache read/modify/write operations and their API responses in order.
   Future<void> _taskWork = Future.value();
 
-  Future<T> _withTaskLock<T>(Future<T> Function() action) {
+  Future<T> _withTaskLock<T>(
+    Future<T> Function() action, {
+    bool changingAccount = false,
+  }) {
+    if (_disposed || (_signingOut && !changingAccount)) {
+      return Future.error(StateError('Sign out is in progress'));
+    }
     final result = _taskWork.then((_) => action());
     _taskWork = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return result;
@@ -412,14 +504,13 @@ class TasksRepository extends ChangeNotifier {
   }
 
   Future<T> _api<T>(Future<T> Function() fn) async {
-    try {
-      return await fn().timeout(const Duration(seconds: 30));
-    } on DetailedApiRequestError catch (e) {
-      if (e.status == 401) {
-        await _auth.invalidateSession();
-      }
-      rethrow;
+    if (_tasksApi == null) {
+      throw const AccountException(
+        AccountFailure.interactionRequired,
+        'Please sign in again.',
+      );
     }
+    return fn().timeout(const Duration(seconds: 30));
   }
 
   Future<List<TaskList>> getTaskLists() async {
@@ -539,7 +630,9 @@ class TasksRepository extends ChangeNotifier {
   int _indexOf(List<CachedTask> entries, {String? serverId, String? localId}) {
     for (var i = 0; i < entries.length; i++) {
       final e = entries[i];
-      if (serverId != null && e.id == serverId) return i;
+      if (serverId != null && (e.id == serverId || e.localId == serverId)) {
+        return i;
+      }
       if (localId != null && e.localId == localId) return i;
     }
     return -1;
@@ -560,7 +653,7 @@ class TasksRepository extends ChangeNotifier {
     String? notes,
     DateTime? due,
   }) async {
-    final localId = 'local-${DateTime.now().millisecondsSinceEpoch}';
+    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
     final entry = CachedTask(
       id: null,
       tasklistId: tasklistId,
@@ -590,6 +683,7 @@ class TasksRepository extends ChangeNotifier {
             _updatedMs(created.updated) ??
             DateTime.now().millisecondsSinceEpoch,
         dirty: false,
+        localId: localId,
         isDeleted: false,
       );
       final all = await _entries(tasklistId);
@@ -599,7 +693,8 @@ class TasksRepository extends ChangeNotifier {
       notifyListeners();
       return created;
     } catch (e) {
-      // Entry stays dirty so background sync can retry the remote create.
+      // Entry stays dirty so a later sync can retry the remote create.
+      if (_defer(e)) return entry.toTask();
       rethrow;
     }
   }
@@ -655,6 +750,7 @@ class TasksRepository extends ChangeNotifier {
       updatedAt:
           _updatedMs(created.updated) ?? DateTime.now().millisecondsSinceEpoch,
       dirty: false,
+      localId: entry.localId,
       isDeleted: false,
     );
     final all = await _entries(tasklistId);
@@ -724,6 +820,10 @@ class TasksRepository extends ChangeNotifier {
     await _writeCacheEntries(tasklistId, entries);
     notifyListeners();
 
+    if (e.id == null) {
+      syncPending = true;
+      return entries[idx].toTask();
+    }
     try {
       final req = Task(
         title: title,
@@ -732,7 +832,7 @@ class TasksRepository extends ChangeNotifier {
         due: _formatDueDate(due),
       );
       final updated = await _api(
-        () => _tasksApi!.tasks.patch(req, tasklistId, taskId),
+        () => _tasksApi!.tasks.patch(req, tasklistId, e.id!),
       );
       final serverEntry = CachedTask.fromTask(updated, tasklistId).copyWith(
         updatedAt: updated.updated == null
@@ -740,6 +840,7 @@ class TasksRepository extends ChangeNotifier {
             : DateTime.tryParse(updated.updated!)?.millisecondsSinceEpoch ??
                   nowMs,
         dirty: false,
+        localId: e.localId,
       );
       final all = await _entries(tasklistId);
       final sidx = _indexOf(all, serverId: taskId);
@@ -748,7 +849,8 @@ class TasksRepository extends ChangeNotifier {
       notifyListeners();
       await _pushOccurrences(tasklistId);
       return updated;
-    } catch (e) {
+    } catch (error) {
+      if (_defer(error)) return entries[idx].toTask();
       rethrow;
     }
   }
@@ -780,6 +882,7 @@ class TasksRepository extends ChangeNotifier {
           : DateTime.tryParse(updated.updated!)?.millisecondsSinceEpoch ??
                 DateTime.now().millisecondsSinceEpoch,
       dirty: false,
+      localId: entry.localId,
     );
     final all = await _entries(tasklistId);
     final idx = _indexOf(all, serverId: entry.id!);
@@ -795,6 +898,11 @@ class TasksRepository extends ChangeNotifier {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final entries = await _entries(tasklistId);
     final idx = _indexOf(entries, serverId: taskId);
+    if (idx != -1 && entries[idx].id == null) {
+      entries.removeAt(idx);
+      await _writeCacheEntries(tasklistId, entries);
+      return;
+    }
     if (idx == -1) {
       entries.add(
         CachedTask(
@@ -815,14 +923,16 @@ class TasksRepository extends ChangeNotifier {
     await _writeCacheEntries(tasklistId, entries);
     notifyListeners();
 
+    final serverId = idx == -1 ? taskId : entries[idx].id!;
     try {
-      await _api(() => _tasksApi!.tasks.delete(tasklistId, taskId));
+      await _api(() => _tasksApi!.tasks.delete(tasklistId, serverId));
       final all = await _entries(tasklistId);
-      all.removeWhere((e) => e.id == taskId);
+      all.removeWhere((e) => e.id == serverId);
       await _writeCacheEntries(tasklistId, all);
       notifyListeners();
     } catch (e) {
-      // Tombstone stays dirty so background sync can retry the remote delete.
+      // Tombstone stays dirty so a later sync can retry the remote delete.
+      if (_defer(e)) return;
       rethrow;
     }
   }
@@ -853,8 +963,16 @@ class TasksRepository extends ChangeNotifier {
       _addNextOccurrences(entries);
       // One Hive write persists completion and its pending successor together.
       await _writeCacheEntries(tasklistId, entries);
-      await _pushUpdate(tasklistId, entries[index]);
-      await _pushOccurrences(tasklistId);
+      try {
+        if (entries[index].id == null) {
+          syncPending = true;
+          return;
+        }
+        await _pushUpdate(tasklistId, entries[index]);
+        await _pushOccurrences(tasklistId);
+      } catch (error) {
+        if (!_defer(error)) rethrow;
+      }
     });
   }
 
@@ -974,10 +1092,22 @@ class TasksRepository extends ChangeNotifier {
       ? null
       : DateTime.utc(due.year, due.month, due.day).toIso8601String();
 
+  Future<void> close() async {
+    try {
+      await _taskWork;
+      await _cacheBox?.close();
+    } finally {
+      _cacheBox = null;
+      _storageLease.release();
+    }
+  }
+
   @override
   void dispose() {
     _disposed = true;
+    unawaited(close());
     _auth.removeListener(_handleAuthChanged);
+    _auth.validateAccount = null;
     if (_ownsAuth) _auth.dispose();
     super.dispose();
   }

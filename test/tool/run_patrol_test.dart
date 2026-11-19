@@ -47,9 +47,9 @@ void main() {
     'prepare artifacts should remove stale captures when a new test attempt starts',
     () async {
       for (final name in [
-        '01_login.png',
+        '01_sign_in_required.png',
         '02_development_warning.png',
-        '14_signed_out.png',
+        '16_sign_in_canceled.png',
         '99_failure.png',
         'test.mp4',
         'instrumentation.txt',
@@ -83,14 +83,14 @@ void main() {
     'collect screenshots should reuse numbered filenames when native captures repeat or include other runs',
     () async {
       final device = _ScreenshotDevice([
-        '$_remoteRoot/nested/1000_42_01_login.png',
-        '$_remoteRoot/nested/900_42_01_login.png',
-        '$_remoteRoot/nested/1100_442_01_login.png',
-        '/somewhere/1200_42_01_login.png',
+        '$_remoteRoot/nested/1000_42_01_sign_in_required.png',
+        '$_remoteRoot/nested/900_42_01_sign_in_required.png',
+        '$_remoteRoot/nested/1100_442_01_sign_in_required.png',
+        '/somewhere/1200_42_01_sign_in_required.png',
         '$_remoteRoot/nested/1100_42_04_tasks_consent.png',
         '$_remoteRoot/nested/1200_42_99_failure.png',
       ]);
-      final oldLogin = File('${output.path}/01_login.png');
+      final oldLogin = File('${output.path}/01_sign_in_required.png');
       await oldLogin.parent.create(recursive: true);
       await oldLogin.writeAsString('old login');
 
@@ -106,14 +106,14 @@ void main() {
                   .replaceAll('\\', '/'),
             )
             .toSet(),
-        {'01_login.png', '04_tasks_consent.png', '99_failure.png'},
+        {'01_sign_in_required.png', '04_tasks_consent.png', '99_failure.png'},
       );
       expect(
-        await File('${output.path}/01_login.png').readAsString(),
-        endsWith('1000_42_01_login.png'),
+        await File('${output.path}/01_sign_in_required.png').readAsString(),
+        endsWith('1000_42_01_sign_in_required.png'),
       );
       expect(device.pulled, [
-        '$_remoteRoot/nested/1000_42_01_login.png',
+        '$_remoteRoot/nested/1000_42_01_sign_in_required.png',
         '$_remoteRoot/nested/1100_42_04_tasks_consent.png',
         '$_remoteRoot/nested/1200_42_99_failure.png',
       ]);
@@ -126,7 +126,9 @@ void main() {
       await File(
         '${output.path}/instrumentation.txt',
       ).writeAsString('OK (1 test)');
-      final device = _ScreenshotDevice(['$_remoteRoot/1000_42_01_login.png']);
+      final device = _ScreenshotDevice([
+        '$_remoteRoot/1000_42_01_sign_in_required.png',
+      ]);
 
       await expectLater(
         collectPatrolScreenshots(device.run, output, '42'),
@@ -134,7 +136,7 @@ void main() {
           isA<StateError>().having(
             (error) => error.message,
             'message',
-            contains('04_tasks_consent'),
+            contains('06_home'),
           ),
         ),
       );
@@ -148,7 +150,7 @@ void main() {
         '${output.path}/instrumentation.txt',
       ).writeAsString('OK (1 test)');
       final device = _ScreenshotDevice([
-        for (final point in ['06_home', '01_login', '04_tasks_consent'])
+        for (final point in ['06_home', '01_sign_in_required'])
           '$_remoteRoot/1000_42_$point.png',
       ]);
 
@@ -159,9 +161,12 @@ void main() {
         stopAfterHome: true,
       );
 
-      expect(device.pulled, hasLength(3));
+      expect(device.pulled, hasLength(2));
       expect(await File('${output.path}/06_home.png').exists(), isTrue);
-      expect(await File('${output.path}/14_signed_out.png').exists(), isFalse);
+      expect(
+        await File('${output.path}/16_sign_in_canceled.png').exists(),
+        isFalse,
+      );
     },
   );
 
@@ -172,7 +177,7 @@ void main() {
       final baseline = File(
         '${output.path}/screenshots/login_screen/login_screen_when_displayed.png',
       );
-      final capture = File('${screenshots.path}/01_login.png');
+      final capture = File('${screenshots.path}/01_sign_in_required.png');
       await baseline.parent.create(recursive: true);
       await capture.parent.create(recursive: true);
       await baseline.writeAsString('native baseline');
@@ -184,7 +189,9 @@ void main() {
       expect(await baseline.readAsString(), 'native baseline');
       expect(await capture.exists(), isFalse);
       expect(await File('${output.path}/device.log').exists(), isFalse);
-      final device = _ScreenshotDevice(['$_remoteRoot/1000_42_01_login.png']);
+      final device = _ScreenshotDevice([
+        '$_remoteRoot/1000_42_01_sign_in_required.png',
+      ]);
       await collectPatrolScreenshots(
         device.run,
         output,
@@ -193,15 +200,23 @@ void main() {
       );
 
       expect(await baseline.readAsString(), 'native baseline');
-      expect(await capture.readAsString(), endsWith('1000_42_01_login.png'));
-      expect(await File('${output.path}/01_login.png').exists(), isFalse);
+      expect(
+        await capture.readAsString(),
+        endsWith('1000_42_01_sign_in_required.png'),
+      );
+      expect(
+        await File('${output.path}/01_sign_in_required.png').exists(),
+        isFalse,
+      );
     },
   );
 
   test(
     'collect screenshots should reject stale runs when no current screenshots exist',
     () async {
-      final device = _ScreenshotDevice(['$_remoteRoot/1000_442_01_login.png']);
+      final device = _ScreenshotDevice([
+        '$_remoteRoot/1000_442_01_sign_in_required.png',
+      ]);
 
       await expectLater(
         collectPatrolScreenshots(device.run, output, '42'),
@@ -220,8 +235,9 @@ void main() {
   test(
     'collect screenshots should reject an empty file when artifact transfer fails',
     () async {
-      final device = _ScreenshotDevice(['$_remoteRoot/1000_42_01_login.png'])
-        ..empty = true;
+      final device = _ScreenshotDevice([
+        '$_remoteRoot/1000_42_01_sign_in_required.png',
+      ])..empty = true;
 
       await expectLater(
         collectPatrolScreenshots(device.run, output, '42'),

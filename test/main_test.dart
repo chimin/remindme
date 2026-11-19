@@ -16,6 +16,9 @@ class _PendingAuth extends AuthRepository {
   bool started = false;
 
   @override
+  Future<void> signIn() async {}
+
+  @override
   Future<void> init() async {
     started = true;
     await ready.future;
@@ -23,6 +26,8 @@ class _PendingAuth extends AuthRepository {
 }
 
 class _RetryRepository extends TasksRepository {
+  @override
+  Future<void> signIn() async {}
   @override
   Future<void> init() async {
     initializationError = null;

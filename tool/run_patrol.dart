@@ -15,7 +15,7 @@ dart run tool/run_patrol.dart --device <adb-serial> --account <test-email>
 
 Requires an unlocked English Android 10+ emulator with Google Play services.
 Physical devices are refused.
-Add the dedicated test account and revoke Remind Me consent before each run.
+Add the dedicated test account. Existing Google Tasks permission can be reused.
 The launcher clears ALL local Remind Me data on the selected device.
 Every run replaces numbered screenshots and patrol_test/golden/test.mp4 at stable paths.
 ''';
@@ -136,8 +136,16 @@ Future<void> main(List<String> arguments) async {
       throw StateError('Wake and unlock the selected device before running.');
     }
 
+    final packageInfo = await onDevice([
+      'shell',
+      'dumpsys',
+      'package',
+      _package,
+    ]);
+    final version = RegExp(r'versionCode=(\d+)').firstMatch(packageInfo);
+    final buildNumber = (int.tryParse(version?.group(1) ?? '') ?? 0) + 1;
     stdout.writeln(
-      'Building Patrol run $runId. Fresh Google consent is required.',
+      'Building Patrol run $runId for Google sign-in and Tasks API verification.',
     );
     await _run(
       Platform.resolvedExecutable,
@@ -147,6 +155,8 @@ Future<void> main(List<String> arguments) async {
         'build',
         'android',
         '--no-label',
+        '--build-number',
+        '$buildNumber',
         '--target',
         'patrol_test/main_test.dart',
         '--dart-define-from-file',
@@ -366,8 +376,7 @@ Future<void> collectPatrolScreenshots(
   if (log.existsSync() &&
       RegExp(r'OK \(1 test\)').hasMatch(log.readAsStringSync())) {
     for (final point in [
-      '01_login',
-      '04_tasks_consent',
+      '01_sign_in_required',
       '06_home',
       if (!stopAfterHome) ...[
         '07_new_task_form',
@@ -375,9 +384,11 @@ Future<void> collectPatrolScreenshots(
         '09_edited_task_form',
         '10_edited',
         '11_before_delete',
-        '12_deleted',
-        '13_sign_out_confirmation',
-        '14_signed_out',
+        '12_delete_confirmation',
+        '13_deleted',
+        '14_sign_out_confirmation',
+        '15_sign_in_required',
+        '16_sign_in_canceled',
       ],
     ]) {
       if (!captured.contains(point)) {

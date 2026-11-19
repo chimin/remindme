@@ -12,6 +12,7 @@ import 'package:remindme/models/task_metadata.dart';
 import 'package:remindme/screens/task_home_screen.dart';
 import 'package:remindme/services/tasks_repository.dart';
 import 'package:remindme/widgets/trailing_checked_menu_item.dart';
+import 'package:remindme/widgets/color_picker.dart';
 
 import 'golden_test_helper.dart';
 
@@ -51,6 +52,21 @@ class _StartupRepository extends MockTasksRepository {
   }
 }
 
+class _ReconnectRepository extends MockTasksRepository {
+  bool reconnect = true;
+  int reconnects = 0;
+  @override
+  bool get requiresReconnect => reconnect;
+  @override
+  String? get userEmail => 'test@example.com';
+  @override
+  Future<void> requestAuthorization() async {
+    reconnects++;
+    reconnect = false;
+    notifyListeners();
+  }
+}
+
 void main() {
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -69,6 +85,46 @@ void main() {
     addTearDown(view.resetPhysicalSize);
     addTearDown(view.resetDevicePixelRatio);
   });
+
+  testWidgets(
+    'sign in should preserve visible tasks when the session needs renewal',
+    (tester) async {
+      final repo = _ReconnectRepository()
+        ..taskLists.add(TaskList(id: 'list-1', title: 'Tasks'))
+        ..mockTasks.add(
+          Task(id: 'task', title: 'Saved offline task', status: 'needsAction'),
+        );
+      addTearDown(repo.dispose);
+      await repo.init();
+      await repo.signIn();
+      await repo.selectTasklist('list-1');
+      await tester.pumpWidget(
+        ChangeNotifierProvider<TasksRepository>.value(
+          value: repo,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: createAppTheme(),
+            home: const TaskHomeScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Saved offline task'), findsOneWidget);
+      expect(find.text('Sign in'), findsOneWidget);
+      final result = await captureAndCompare(
+        tester,
+        find.byType(MaterialApp),
+        'screenshots/task_home_screen/task_home_screen_when_sign_in_required.png',
+        'sign_in_required',
+      );
+      expect(result['pass'], isTrue);
+      await tester.tap(find.text('Sign in'));
+      await tester.pumpAndSettle();
+      expect(repo.reconnects, 1);
+      expect(find.text('Sign in'), findsNothing);
+      expect(find.text('Saved offline task'), findsOneWidget);
+    },
+  );
 
   Future<_SingleDeletionRepository> swipeTask(WidgetTester tester) async {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -375,7 +431,18 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Widget appearance'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Dark'));
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('color_box_Background color')),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('color_box_Background color')),
+        );
+        await tester.pumpAndSettle();
+        tester
+            .widget<ColorPicker>(find.byType(ColorPicker))
+            .onChanged(const Color(4280754481));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('OK'));
         await tester.pumpAndSettle();
         calls.clear();
         await tester.tap(find.text(save ? 'Save appearance' : 'Cancel'));
@@ -724,7 +791,7 @@ void main() {
   );
 
   testWidgets(
-    'sign out confirmation dialog should appear when logout button is tapped',
+    'sign out should show confirmation when the sign out action is tapped',
     (WidgetTester tester) async {
       final messenger = tester.binding.defaultBinaryMessenger;
       messenger.setMockMethodCallHandler(

@@ -52,12 +52,11 @@ void main() {
           'Clean startup must show the login screen',
         );
         expect(auth.signedIn, isFalse);
-        await _capture($, '01_login');
+        await _capture($, '01_sign_in_required', settle: false);
 
         // Do not settle an animation while Google owns the foreground.
-        await $.tester.tap(find.text('Continue with Google'));
         await Future<void>.delayed(const Duration(milliseconds: 100));
-        await _grantFreshTasksConsent($, auth);
+        await _completeSignIn($, auth);
         await _waitFor(
           $,
           () => find.byType(TaskHomeScreen).evaluate().isNotEmpty,
@@ -141,6 +140,13 @@ void main() {
         await $(find.byTooltip('Delete task')).tap();
         await _waitFor(
           $,
+          () => find.text('Delete task?').evaluate().isNotEmpty,
+          'Task deletion confirmation',
+        );
+        await _capture($, '12_delete_confirmation');
+        await $(find.widgetWithText(FilledButton, 'Delete')).tap();
+        await _waitFor(
+          $,
           () =>
               find.byType(TaskHomeScreen).evaluate().isNotEmpty &&
               find.text(editedTitle).evaluate().isEmpty,
@@ -152,23 +158,32 @@ void main() {
         }, 'Deleted task absent from Google Tasks');
         deleted = true;
         expect(find.text(title), findsNothing);
-        await _capture($, '12_deleted');
+        await _capture($, '13_deleted');
 
         await $(find.byTooltip('Menu')).tap();
         await $(find.text('Sign out')).tap();
-        await _capture($, '13_sign_out_confirmation');
-        await $(find.widgetWithText(TextButton, 'Sign out')).tap();
+        await _capture($, '14_sign_out_confirmation');
+        await $.tester.tap(find.widgetWithText(TextButton, 'Sign out'));
+        await $.platform.android.waitUntilVisible(
+          const AndroidSelector(
+            applicationPackage: 'android',
+            text: 'Choose an account',
+          ),
+          timeout: _googleTimeout,
+        );
+        await _capture($, '15_sign_in_required', settle: false);
+        await $.platform.android.pressBack();
         await _waitFor(
           $,
           () =>
               find.byType(LoginScreen).evaluate().isNotEmpty &&
               !auth.signedIn &&
               !repo.signingIn,
-          'Signed out login screen',
+          'Sign in screen after signing out',
         );
         expect(repo.selectedTasklistId, isNull);
-        expect(find.text('Continue with Google'), findsOneWidget);
-        await _capture($, '14_signed_out');
+        expect(auth.hasLinkedAccount, isFalse);
+        await _capture($, '16_sign_in_canceled');
       } catch (_) {
         // Capture before cleanup changes the failing screen.
         try {
@@ -336,7 +351,7 @@ Future<void> _tapGoogleView(
   ),
 );
 
-Future<void> _grantFreshTasksConsent(
+Future<void> _completeSignIn(
   PatrolIntegrationTester $,
   AuthRepository auth,
 ) async {
@@ -353,7 +368,7 @@ Future<void> _grantFreshTasksConsent(
   while (clock.elapsed < const Duration(minutes: 3) &&
       screenClock.elapsed < _googleTimeout) {
     if (find.byType(TaskHomeScreen).evaluate().isNotEmpty) {
-      expect(sawTasks, isTrue, reason: 'Fresh Tasks consent must be shown.');
+      expect(auth.hasLinkedAccount, isTrue);
       return;
     }
     if (!auth.signingIn && auth.authError != null) {
@@ -366,7 +381,9 @@ Future<void> _grantFreshTasksConsent(
     final googleViews = views.where(
       (view) =>
           view.applicationPackage == 'com.google.android.gms' ||
-          view.applicationPackage == 'com.google.android.gsf.login',
+          view.applicationPackage == 'com.google.android.gsf.login' ||
+          view.applicationPackage == 'android' ||
+          view.applicationPackage == 'com.android.settings',
     );
     final unverifiedWarning = googleViews.any(
       (view) => RegExp(
@@ -430,6 +447,19 @@ Future<void> _grantFreshTasksConsent(
         continue;
       }
     }
+    final accountConfirmation = googleViews.where(
+      (view) =>
+          selectedAccount &&
+          view.applicationPackage == 'android' &&
+          view.isEnabled &&
+          _nativeLabel(view).toLowerCase() == 'ok',
+    );
+    if (accountConfirmation.isNotEmpty) {
+      await _capture($, '02_account_selected', settle: false);
+      await _tapGoogleView($, accountConfirmation.first);
+      screenClock.reset();
+      continue;
+    }
     // Identify the actual Tasks scope description, not a generic login button.
     final tasksPermission = googleViews.any(
       (view) => RegExp(
@@ -478,9 +508,15 @@ Future<void> _grantFreshTasksConsent(
       screenClock.reset();
       continue;
     }
-    if (sawTasks &&
+    final consentPage = googleViews.any(
+      (view) => _nativeLabel(
+        view,
+      ).toLowerCase().contains('wants access to your google account'),
+    );
+    if ((sawTasks || consentPage) &&
         consentScrolls < 8 &&
         (tasksPermission ||
+            consentPage ||
             googleViews.any(
               (view) => _nativeLabel(view).toLowerCase() == 'scroll down',
             ))) {
@@ -499,19 +535,14 @@ Future<void> _grantFreshTasksConsent(
     // can hang until the authorization Activity closes; poll in real time.
     await Future<void>.delayed(const Duration(milliseconds: 250));
     if (find.byType(TaskHomeScreen).evaluate().isNotEmpty) {
-      if (!sawTasks) {
-        fail(
-          'Fresh Tasks permission prompt was absent. Revoke '
-          'Remind Me access in the test Google account before running again.',
-        );
-      }
+      expect(auth.hasLinkedAccount, isTrue);
       return;
     }
   }
   fail(
     sawTasks
         ? 'Google authorization did not finish within 60 seconds.'
-        : 'Fresh Tasks permission prompt was not found. Revoke account consent, '
+        : 'Sign in did not complete. Check the test account, '
               'use an English device, and check that the configured test account is added.',
   );
 }

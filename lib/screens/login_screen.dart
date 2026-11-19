@@ -1,10 +1,48 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/tasks_repository.dart';
-import '../utils/log.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(context.read<TasksRepository>().signIn());
+    });
+  }
+
+  Future<void> _signOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text(
+          'Saved tasks and unsynced changes on this device will be removed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final repo = context.read<TasksRepository>();
+    await repo.signOut();
+    await repo.signIn();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,23 +128,13 @@ class LoginScreen extends StatelessWidget {
                         ),
                         onPressed: repo.signedIn || repo.signingIn
                             ? null
-                            : () async {
-                                try {
-                                  await context
-                                      .read<TasksRepository>()
-                                      .signIn();
-                                } catch (e, st) {
-                                  logError('Sign in failed', e, st);
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Sign in failed: $e'),
-                                      ),
-                                    );
-                                  }
-                                }
-                              },
+                            : repo.signIn,
                       ),
+                      if (repo.selectedTasklistId != null)
+                        TextButton(
+                          onPressed: _signOut,
+                          child: const Text('Sign out'),
+                        ),
                       const SizedBox(height: 24),
                       Text(
                         'Sync your tasks across devices.',
