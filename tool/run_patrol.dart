@@ -15,7 +15,9 @@ dart run tool/run_patrol.dart --device <adb-serial> --account <test-email>
 
 Requires an unlocked English Android 10+ emulator with Google Play services.
 Physical devices are refused.
-Add the dedicated test account. Existing Google Tasks permission can be reused.
+Before EVERY run, manually revoke Remind Me access from the dedicated test Google account.
+The Google Tasks consent prompt is mandatory; the test fails if it is absent.
+The launcher does not reset Google consent automatically.
 The launcher clears ALL local Remind Me data on the selected device.
 Every run replaces numbered screenshots and patrol_test/golden/test.mp4 at stable paths.
 ''';
@@ -145,7 +147,7 @@ Future<void> main(List<String> arguments) async {
     final version = RegExp(r'versionCode=(\d+)').firstMatch(packageInfo);
     final buildNumber = (int.tryParse(version?.group(1) ?? '') ?? 0) + 1;
     stdout.writeln(
-      'Building Patrol run $runId for Google sign-in and Tasks API verification.',
+      'Building Patrol run $runId. Fresh Google Tasks consent is required; reset it manually before each run.',
     );
     await _run(
       Platform.resolvedExecutable,
@@ -377,6 +379,7 @@ Future<void> collectPatrolScreenshots(
       RegExp(r'OK \(1 test\)').hasMatch(log.readAsStringSync())) {
     for (final point in [
       '01_sign_in_required',
+      '04_tasks_consent',
       '06_home',
       if (!stopAfterHome) ...[
         '07_new_task_form',

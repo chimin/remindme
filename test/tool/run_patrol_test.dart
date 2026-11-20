@@ -128,6 +128,7 @@ void main() {
       ).writeAsString('OK (1 test)');
       final device = _ScreenshotDevice([
         '$_remoteRoot/1000_42_01_sign_in_required.png',
+        '$_remoteRoot/1000_42_04_tasks_consent.png',
       ]);
 
       await expectLater(
@@ -144,13 +145,40 @@ void main() {
   );
 
   test(
+    'collect screenshots should reject silent sign in when the consent prompt was not captured',
+    () async {
+      await File(
+        '${output.path}/instrumentation.txt',
+      ).writeAsString('OK (1 test)');
+      final device = _ScreenshotDevice([
+        '$_remoteRoot/1000_42_01_sign_in_required.png',
+        '$_remoteRoot/1000_42_06_home.png',
+      ]);
+      await expectLater(
+        collectPatrolScreenshots(device.run, output, '42', stopAfterHome: true),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('04_tasks_consent'),
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
     'collect screenshots should accept only sign-in checkpoints when the sign-in check passes',
     () async {
       await File(
         '${output.path}/instrumentation.txt',
       ).writeAsString('OK (1 test)');
       final device = _ScreenshotDevice([
-        for (final point in ['06_home', '01_sign_in_required'])
+        for (final point in [
+          '06_home',
+          '01_sign_in_required',
+          '04_tasks_consent',
+        ])
           '$_remoteRoot/1000_42_$point.png',
       ]);
 
@@ -161,7 +189,7 @@ void main() {
         stopAfterHome: true,
       );
 
-      expect(device.pulled, hasLength(2));
+      expect(device.pulled, hasLength(3));
       expect(await File('${output.path}/06_home.png').exists(), isTrue);
       expect(
         await File('${output.path}/16_sign_in_canceled.png').exists(),

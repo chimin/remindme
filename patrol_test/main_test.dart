@@ -20,6 +20,10 @@ const _allowUnverifiedApp = bool.fromEnvironment('PATROL_ALLOW_UNVERIFIED_APP');
 const _stopAfterHome = bool.fromEnvironment('PATROL_STOP_AFTER_HOME');
 const _googleTimeout = Duration(seconds: 60);
 const _remoteTimeout = Duration(seconds: 30);
+const _freshConsentRequired =
+    'Fresh Google Tasks consent prompt was not shown. Manually revoke Remind Me '
+    'access from the test Google account before running this test again. '
+    'Clearing local app data does not reset Google consent.';
 
 void main() {
   patrolTest(
@@ -368,6 +372,7 @@ Future<void> _completeSignIn(
   while (clock.elapsed < const Duration(minutes: 3) &&
       screenClock.elapsed < _googleTimeout) {
     if (find.byType(TaskHomeScreen).evaluate().isNotEmpty) {
+      expect(sawTasks, isTrue, reason: _freshConsentRequired);
       expect(auth.hasLinkedAccount, isTrue);
       return;
     }
@@ -398,6 +403,8 @@ Future<void> _completeSignIn(
       );
     }
     if (unverifiedWarning && !warningCaptured) {
+      // WebView accessibility text can arrive before its first painted frame.
+      await Future<void>.delayed(const Duration(seconds: 3));
       await _capture($, '02_development_warning', settle: false);
       warningCaptured = true;
     }
@@ -535,6 +542,7 @@ Future<void> _completeSignIn(
     // can hang until the authorization Activity closes; poll in real time.
     await Future<void>.delayed(const Duration(milliseconds: 250));
     if (find.byType(TaskHomeScreen).evaluate().isNotEmpty) {
+      expect(sawTasks, isTrue, reason: _freshConsentRequired);
       expect(auth.hasLinkedAccount, isTrue);
       return;
     }
@@ -542,7 +550,6 @@ Future<void> _completeSignIn(
   fail(
     sawTasks
         ? 'Google authorization did not finish within 60 seconds.'
-        : 'Sign in did not complete. Check the test account, '
-              'use an English device, and check that the configured test account is added.',
+        : _freshConsentRequired,
   );
 }

@@ -15,3 +15,9 @@ A signed-out foreground app immediately starts sign in. Cancellation blocks task
 Old caches have no recorded owner. Signing in after an upgrade verifies access to all remembered task-list IDs before uploads; if the list has been deleted or belongs to another account, users must choose their original account or explicitly discard the cache. No automatic account fallback is allowed.
 
 Background workers restore the same provider without an Activity. A process-wide storage lease prevents concurrent foreground/worker Hive access. Workers defer while the foreground engine owns storage. Both platforms retain the daily schedule, subject to OS scheduling; Android force-stop and iOS force-quit prevent expected background execution. iOS validates on a macOS host with Xcode and real OAuth configuration.
+
+## Patrol E2E prerequisite
+
+Before every run, manually revoke Remind Me access from the dedicated test Google account so the Google Tasks consent prompt appears again. The test never revokes Google consent automatically. Clearing local app data is not enough.
+
+Both the full lifecycle test and the sign-in-only check must observe the Google Tasks permission description and capture `04_tasks_consent.png`. Reaching Home without that prompt fails the test and explains the manual reset requirement.
