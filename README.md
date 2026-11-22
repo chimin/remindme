@@ -148,6 +148,13 @@ suite. Edit the `.feature` and step files, not the generated test.
 
 ## Patrol E2E test (Android, manual only)
 
+The Cucumber-style scenario lives in `patrol_test/main.feature`; step definitions
+use Patrol for native Android interactions. The launcher generates `patrol_test/main_test.dart`,
+builds the APKs, and runs the full lifecycle in one command. The generated
+Patrol runner and bundle are excluded from Git; commit the feature and
+step/support files. Feature files have a blank line before a `When` clause when it
+follows a `Then` clause.
+
 This real-account flow signs in, grants **fresh Google Tasks permission**, creates
 a uniquely named task, edits its title and notes, deletes it, and signs out.
 Creation, editing, and deletion are checked directly against Google Tasks as
@@ -164,46 +171,74 @@ Run it only when E2E execution is explicitly requested.
    and add the account to the OAuth consent screen's test users if applicable.
    Keep the existing `secrets/build.keystore` and `secrets/build.json` configured
    as described above. Do not commit credentials; the E2E screenshots and video use versionable paths.
-3. In the test account, open
-   [Google Account connections](https://myaccount.google.com/connections), select
-   the OAuth application used by Remind Me, and remove its access/connection.
-   Do this **before every run**. Clearing Android app data does not revoke Google
-   consent. The flow fails if the Tasks permission prompt is absent.
+3. [Unlink Remind Me from the Google test account](#unlink-remind-me-before-every-run)
+   before **every run**, including reruns after failures. This resets Google's
+   saved consent so the required sign-in/Google Tasks permission confirmation appears.
 4. Ensure the device is online, awake and unlocked, and close other account
    dialogs. Use `adb devices` to obtain its exact serial. Check the account for
    any `RemindMe Patrol <run ID>` task left by an interrupted previous run and
    delete only that test task if necessary. Other tasks are preserved.
 
-### Run explicitly
+### Unlink Remind Me before every run
 
-From the repository root, resolve dependencies once:
+Open [Google Account connections](https://myaccount.google.com/connections) in a
+browser and check the profile picture/email to ensure you are using the same
+dedicated test account passed to the launcher.
 
-```text
+1. Find and select **Remind Me** (the OAuth application used by this project).
+2. Choose **Delete all connections you have with Remind Me**, or **Remove access**
+   if that is the option shown, and confirm the removal.
+3. Check that its access has been removed, then run the Patrol command below.
+
+The next run must show Google's sign-in/Google Tasks permission confirmation.
+The test deliberately fails if fresh Tasks consent is missing; do not remove or
+weaken that check in the feature's sign-in step. Signing out, reinstalling the
+app, or clearing Android app data does not revoke Google's saved consent.
+Patrol setup additionally calls Google's native revoke-access API for the selected
+test account's Tasks authorization before starting the app. If Google reports
+the specific `[28470] No access token was returned` reset error, setup continues
+because there is no token to revoke. Every other reset error aborts the test.
+The actual fresh Tasks consent screen is still mandatory in either case.
+This reset and authorization diagnostics are enabled only in Patrol builds;
+normal app builds cannot invoke the reset. Diagnostic logs include
+`hasResolution()` without access tokens.
+
+See [Google's instructions for managing app access](https://support.google.com/accounts/answer/3466521).
+
+### Run the Patrol test
+
+Run these commands in PowerShell from the repository root. Resolve dependencies once:
+
+```powershell
 flutter pub get
 ```
 
-Then invoke the Dart launcher to run the complete lifecycle and record it:
+Find the running emulator serial:
 
-```text
+```powershell
+adb devices
+```
+
+Replace `<device-id>` and `<test-email>` below with that serial and your dedicated test account.
+This single command generates the required runners, builds and installs the APKs,
+runs the full lifecycle, and collects screenshots and video. No separate
+`build_runner` command is needed:
+
+```powershell
 dart run tool/run_patrol.dart --device <device-id> --account <test-email> --dart-define-from-file secrets/build.json
 ```
 
 For the existing unverified development project on the Pixel emulator, use its
 ADB serial (for example `emulator-5554`) and enable the development warning flow:
 
-```text
+```powershell
 dart run tool/run_patrol.dart --device emulator-5554 --account <test-email> --dart-define-from-file secrets/build.json --allow-unverified-app
 ```
 
 This runs **login → grant Tasks permission → create task → edit that task →
 delete that task → sign out**. It checks the saved title and notes by reopening
 the editor, verifies creation/update/deletion against Google Tasks, and confirms
-the final signed-out login screen. Existing account tasks are preserved. Do not
-add `--stop-after-home` when running the complete flow.
-
-To verify sign-in through the loaded home screen without creating tasks, add
-`--stop-after-home`. This mode captures login, Tasks consent, and home, then
-signs out during cleanup. It reports a sign-in check, not a full lifecycle pass.
+the final signed-out login screen. Existing account tasks are preserved.
 
 For your own unverified development OAuth project, add `--allow-unverified-app`.
 This explicitly enables **Advanced → Go to Remind Me (unsafe)** on Google's
@@ -229,14 +264,51 @@ fixtures do not execute. Each run uses unique task data. Google screens have a
 limit; remote assertions have a 30-second timeout. The launcher returns a nonzero
 exit code for reset, test, screenshot, or video-recording/collection failures.
 
+### Screenshot comparison and runs without video
+
+The feature compares every captured Patrol checkpoint against the golden
+reference set using [Pixelmatch](https://pub.dev/packages/pixelmatch). Golden
+references use the original numbered names directly in `screenshots/e2e/`.
+New captures are collected in `patrol_test/golden/screenshots/`. Failed comparisons
+save the captured image beside its reference with a `_FAILED` suffix, for example
+`screenshots/e2e/08_created_FAILED.png`. Passing captures do not replace references.
+
+Use `And I capture screenshot {'16_sign_in_canceled'} and compare with the golden reference`
+at each checkpoint in the feature. The comparison code allows 5% difference per
+screenshot; the step has no percentage parameter. Google account and development
+warning captures are skipped when those optional screens are not shown. The
+Tasks consent and confirmation captures remain mandatory. Comparisons run on the
+host after screenshots have been collected. A screenshot fails only when its
+differing-pixel count divided by its compared app pixels exceeds **5%**. A
+difference of exactly 5% passes. Pixelmatch uses its perceptual per-pixel color
+threshold of 0.1, including anti-aliased pixels. This color sensitivity is
+separate from the allowed 5% image-area difference. Android system bars are
+excluded using identical crops on actual and golden screenshots. Run IDs and
+other app text remain part of the comparison.
+
+The launcher compares every captured checkpoint, reports all mismatches, and
+fails for missing references or changed dimensions. Google warning screens are
+optional when not shown; the mandatory consent check remains unchanged. A JSON
+report with each screenshot's differing pixels and percentage is written to
+`patrol_test/golden/screenshot_comparison.json`. Keep the same device display settings as the reference set.
+
+```powershell
+dart run tool/run_patrol.dart --device emulator-5556 --account <test-email> --dart-define-from-file secrets/build.json --allow-unverified-app --no-video
+```
+
+Use `--update-goldens` explicitly to create or replace the entire captured golden
+set for review. This mode does not assert a visual match. Normal runs never
+replace goldens. With `--no-video`, screenshots and logs are still collected,
+but neither encoder checks nor video recording run. Previous run video is cleared.
+
 ### Screenshots, video, and failures
 
-Patrol screenshots (including Google's UI) use **stable numbered paths**
-in `screenshots/e2e/`. Video and diagnostics remain
+Patrol golden references (including Google's UI) use **stable numbered paths**
+in `screenshots/e2e/`. Current captures, video, and diagnostics remain
 in `patrol_test/golden/`:
 
 ```text
-01_login.png
+01_sign_in_required.png
 02_development_warning.png
 03_development_confirmation.png
 04_tasks_consent.png
@@ -247,22 +319,23 @@ in `patrol_test/golden/`:
 09_edited_task_form.png
 10_edited.png
 11_before_delete.png
-12_deleted.png
-13_sign_out_confirmation.png
-14_signed_out.png
-99_failure.png
+12_delete_confirmation.png
+13_deleted.png
+14_sign_out_confirmation.png
+15_sign_in_required.png
+16_sign_in_canceled.png
 ```
 
 The continuous video stays at `patrol_test/golden/test.mp4`.
 
 Each checkpoint keeps its sequence number across runs. Development warning
-captures are optional; `99_failure.png` is attempted if the test fails. These
-PNGs and the MP4 are available to Git, so committing successive runs records
-changes to the same files. Logs and older timestamped directories stay ignored.
-These are review artifacts, not pixel-comparison golden tests.
+captures are optional; `99_failure_FAILED.png` is attempted if the lifecycle fails.
+Commit approved golden references. Failed captures retain the `_FAILED` suffix
+and never replace the reference images. Logs and older timestamped directories stay ignored.
+Every captured checkpoint is compared against its corresponding golden reference.
 
-Before recording starts, the launcher removes only its previous numbered PNGs,
-video, and diagnostic logs. A failed or sign-in-only run therefore cannot retain
+Before recording starts, the launcher removes previous `_FAILED` images, raw
+captures, video, and diagnostic logs. Golden references are preserved. A failed run therefore cannot retain
 unreached checkpoints from an older full lifecycle. Other files and historical
 subdirectories are preserved. Build/preflight failures leave existing captures
 untouched. On-device captures and test task data still use a unique run ID to

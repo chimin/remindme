@@ -9,3 +9,4 @@
 9. capture the patrol screenshots in the `screenshots/e2e` directory
 10. the patrol screenshot name follows this pattern: {2_digits_sequence}_{description}
 11. use `powershell` to run shell command
+12. in feature files, add a blank line before each When clause if it's after a Then clause

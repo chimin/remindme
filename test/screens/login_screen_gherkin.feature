@@ -1,4 +1,4 @@
-﻿Feature: First launch
+Feature: First launch
   Scenario: opening the app should show the login button when newly installed
     Given the app is newly installed
     When the user opens the app

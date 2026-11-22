@@ -50,11 +50,13 @@ void main() {
         '01_sign_in_required.png',
         '02_development_warning.png',
         '16_sign_in_canceled.png',
-        '99_failure.png',
+        '99_failure_FAILED.png',
+        '01_sign_in_required_FAILED.png',
         'test.mp4',
         'instrumentation.txt',
         'device.log',
         'recording.txt',
+        'screenshot_comparison.json',
         'notes.txt',
         'reference.png',
       ]) {
@@ -65,7 +67,11 @@ void main() {
       final history = Directory('${output.path}/123')..createSync();
       await File('${history.path}/test.mp4').writeAsString('history');
 
+      final raw = File('${output.path}/screenshots/01_sign_in_required.png');
+      await raw.parent.create();
+      await raw.writeAsString('previous actual');
       preparePatrolArtifacts(output);
+      expect(await raw.exists(), isFalse);
 
       final remaining = output
           .listSync()
@@ -74,7 +80,15 @@ void main() {
                 entry.uri.pathSegments.where((part) => part.isNotEmpty).last,
           )
           .toSet();
-      expect(remaining, {'123', 'notes.txt', 'reference.png'});
+      expect(remaining, {
+        '123',
+        'screenshots',
+        'notes.txt',
+        'reference.png',
+        '01_sign_in_required.png',
+        '02_development_warning.png',
+        '16_sign_in_canceled.png',
+      });
       expect(await File('${history.path}/test.mp4').readAsString(), 'history');
     },
   );
@@ -106,12 +120,21 @@ void main() {
                   .replaceAll('\\', '/'),
             )
             .toSet(),
-        {'01_sign_in_required.png', '04_tasks_consent.png', '99_failure.png'},
+        {
+          '01_sign_in_required.png',
+          'screenshots/01_sign_in_required.png',
+          'screenshots/04_tasks_consent.png',
+          'screenshots/99_failure.png',
+          '99_failure_FAILED.png',
+        },
       );
       expect(
-        await File('${output.path}/01_sign_in_required.png').readAsString(),
+        await File(
+          '${output.path}/screenshots/01_sign_in_required.png',
+        ).readAsString(),
         endsWith('1000_42_01_sign_in_required.png'),
       );
+      expect(await oldLogin.readAsString(), 'old login');
       expect(device.pulled, [
         '$_remoteRoot/nested/1000_42_01_sign_in_required.png',
         '$_remoteRoot/nested/1100_42_04_tasks_consent.png',
@@ -155,7 +178,7 @@ void main() {
         '$_remoteRoot/1000_42_06_home.png',
       ]);
       await expectLater(
-        collectPatrolScreenshots(device.run, output, '42', stopAfterHome: true),
+        collectPatrolScreenshots(device.run, output, '42'),
         throwsA(
           isA<StateError>().having(
             (error) => error.message,
@@ -168,7 +191,7 @@ void main() {
   );
 
   test(
-    'collect screenshots should accept only sign-in checkpoints when the sign-in check passes',
+    'collect screenshots should accept all lifecycle checkpoints when the full flow passes',
     () async {
       await File(
         '${output.path}/instrumentation.txt',
@@ -178,22 +201,32 @@ void main() {
           '06_home',
           '01_sign_in_required',
           '04_tasks_consent',
+          '07_new_task_form',
+          '08_created',
+          '09_edited_task_form',
+          '10_edited',
+          '11_before_delete',
+          '12_delete_confirmation',
+          '13_deleted',
+          '14_sign_out_confirmation',
+          '15_sign_in_required',
+          '16_sign_in_canceled',
         ])
           '$_remoteRoot/1000_42_$point.png',
       ]);
 
-      await collectPatrolScreenshots(
-        device.run,
-        output,
-        '42',
-        stopAfterHome: true,
-      );
+      await collectPatrolScreenshots(device.run, output, '42');
 
-      expect(device.pulled, hasLength(3));
-      expect(await File('${output.path}/06_home.png').exists(), isTrue);
+      expect(device.pulled, hasLength(13));
       expect(
-        await File('${output.path}/16_sign_in_canceled.png').exists(),
-        isFalse,
+        await File('${output.path}/screenshots/06_home.png').exists(),
+        isTrue,
+      );
+      expect(
+        await File(
+          '${output.path}/screenshots/16_sign_in_canceled.png',
+        ).exists(),
+        isTrue,
       );
     },
   );
@@ -215,7 +248,7 @@ void main() {
       preparePatrolArtifacts(output, screenshots: screenshots);
 
       expect(await baseline.readAsString(), 'native baseline');
-      expect(await capture.exists(), isFalse);
+      expect(await capture.readAsString(), 'stale patrol capture');
       expect(await File('${output.path}/device.log').exists(), isFalse);
       final device = _ScreenshotDevice([
         '$_remoteRoot/1000_42_01_sign_in_required.png',
@@ -229,9 +262,12 @@ void main() {
 
       expect(await baseline.readAsString(), 'native baseline');
       expect(
-        await capture.readAsString(),
+        await File(
+          '${output.path}/screenshots/01_sign_in_required.png',
+        ).readAsString(),
         endsWith('1000_42_01_sign_in_required.png'),
       );
+      expect(await capture.readAsString(), 'stale patrol capture');
       expect(
         await File('${output.path}/01_sign_in_required.png').exists(),
         isFalse,

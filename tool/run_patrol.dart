@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'patrol_video_recorder.dart';
+import 'patrol_screenshot_comparator.dart';
 
 const _package = 'chimin.remindme';
 const _testClass = 'chimin.remindme.PatrolMainTest';
@@ -11,15 +12,17 @@ Run only when real Google-account E2E execution is explicitly requested.
 
 dart run tool/run_patrol.dart --device <adb-serial> --account <test-email>
     --dart-define-from-file secrets/build.json
-    [--allow-unverified-app] [--stop-after-home]
+    [--allow-unverified-app] [--no-video] [--update-goldens]
 
+Generates the Cucumber runner, builds the APKs, and runs the full lifecycle.
 Requires an unlocked English Android 10+ emulator with Google Play services.
 Physical devices are refused.
 Before EVERY run, manually revoke Remind Me access from the dedicated test Google account.
 The Google Tasks consent prompt is mandatory; the test fails if it is absent.
-The launcher does not reset Google consent automatically.
+Patrol setup also revokes Google Tasks authorization for the selected test account.
 The launcher clears ALL local Remind Me data on the selected device.
-Every run replaces numbered screenshots and patrol_test/golden/test.mp4 at stable paths.
+Every run preserves golden references and clears previous run artifacts.
+Use --no-video to skip recording; use --update-goldens to create baselines for review.
 ''';
 
 Future<void> main(List<String> arguments) async {
@@ -34,7 +37,8 @@ Future<void> main(List<String> arguments) async {
       final option = arguments[i];
       if (const {
         '--allow-unverified-app',
-        '--stop-after-home',
+        '--no-video',
+        '--update-goldens',
       }.contains(option)) {
         if (options.containsKey(option)) {
           throw FormatException('Repeated option: $option');
@@ -52,10 +56,11 @@ Future<void> main(List<String> arguments) async {
       }
       options[option] = arguments[++i];
     }
+    final recordVideo = options['--no-video'] != 'true';
+    final updateGoldens = options['--update-goldens'] == 'true';
     final device = options['--device'];
     final account = options['--account'];
     final config = options['--dart-define-from-file'] ?? 'secrets/build.json';
-    final stopAfterHome = options['--stop-after-home'] == 'true';
     if (device == null ||
         !RegExp(r'^[a-zA-Z0-9_.:-]+$').hasMatch(device) ||
         account == null ||
@@ -128,7 +133,7 @@ Future<void> main(List<String> arguments) async {
         'Set the selected device language to English (found $locale).',
       );
     }
-    await PatrolVideoRecorder.verifySupport(onDevice);
+    if (recordVideo) await PatrolVideoRecorder.verifySupport(onDevice);
     final power = await onDevice(['shell', 'dumpsys', 'power']);
     final policy = await onDevice(['shell', 'dumpsys', 'window', 'policy']);
     if (!power.contains('mWakefulness=Awake') ||
@@ -136,6 +141,22 @@ Future<void> main(List<String> arguments) async {
           r'(?:mShowingLockscreen|isStatusBarKeyguard|showing|inputRestricted)=true',
         ).hasMatch(policy)) {
       throw StateError('Wake and unlock the selected device before running.');
+    }
+
+    stdout.writeln('Generating the Patrol test from Gherkin.');
+    await _run(
+      Platform.resolvedExecutable,
+      [
+        'run',
+        'build_runner',
+        'build',
+        '--build-filter=patrol_test/main_test.dart',
+      ],
+      timeout: const Duration(minutes: 5),
+      echo: true,
+    );
+    if (!File('patrol_test/main_test.dart').existsSync()) {
+      throw StateError('Generated Patrol test is missing.');
     }
 
     final packageInfo = await onDevice([
@@ -147,7 +168,7 @@ Future<void> main(List<String> arguments) async {
     final version = RegExp(r'versionCode=(\d+)').firstMatch(packageInfo);
     final buildNumber = (int.tryParse(version?.group(1) ?? '') ?? 0) + 1;
     stdout.writeln(
-      'Building Patrol run $runId. Fresh Google Tasks consent is required; reset it manually before each run.',
+      'Building Patrol run $runId. Fresh Google Tasks consent is required; Patrol setup also resets native authorization.',
     );
     await _run(
       Platform.resolvedExecutable,
@@ -169,8 +190,6 @@ Future<void> main(List<String> arguments) async {
         'PATROL_RUN_ID=$runId',
         '--dart-define',
         'PATROL_ALLOW_UNVERIFIED_APP=${options['--allow-unverified-app'] == 'true'}',
-        '--dart-define',
-        'PATROL_STOP_AFTER_HOME=$stopAfterHome',
       ],
       timeout: const Duration(minutes: 15),
       echo: true,
@@ -207,20 +226,26 @@ Future<void> main(List<String> arguments) async {
     final output = Directory('patrol_test/golden');
     final screenshots = Directory('screenshots/e2e');
     preparePatrolArtifacts(output, screenshots: screenshots);
-    final recording = PatrolVideoRecorder(
-      adb: adb,
-      device: device,
-      runId: runId,
-      output: output,
-      onDevice: onDevice,
-    );
+    final recording = recordVideo
+        ? PatrolVideoRecorder(
+            adb: adb,
+            device: device,
+            runId: runId,
+            output: output,
+            onDevice: onDevice,
+          )
+        : null;
     String? testOutput;
     Object? runFailure;
     try {
       // Start before native discovery launches the app, so Google UI, task
       // actions, final sign-out, and test cleanup are all part of the video.
-      await recording.start();
-      stdout.writeln('Recording the complete test on $device.');
+      await recording?.start();
+      stdout.writeln(
+        recordVideo
+            ? 'Recording the complete test on $device.'
+            : 'Video recording disabled for this run.',
+      );
       testOutput = await onDevice([
         'shell',
         'am',
@@ -251,7 +276,7 @@ Future<void> main(List<String> arguments) async {
       }
     } finally {
       try {
-        await recording.stopAndCollect();
+        await recording?.stopAndCollect();
       } catch (error) {
         stderr.writeln('Video recording/collection failed: $error');
         runFailure ??= error;
@@ -281,7 +306,6 @@ Future<void> main(List<String> arguments) async {
           onDevice,
           output,
           runId,
-          stopAfterHome: stopAfterHome,
           screenshots: screenshots,
         );
       } catch (error) {
@@ -290,9 +314,16 @@ Future<void> main(List<String> arguments) async {
       }
     }
     if (runFailure != null) throw runFailure;
+    final comparison = await comparePatrolScreenshot(
+      screenshots,
+      File('${output.path}/device.log'),
+      runId,
+      updateGoldens: updateGoldens,
+    );
+    stdout.writeln(comparison);
     stdout.writeln(
-      'Patrol ${stopAfterHome ? 'sign-in check' : 'task lifecycle'} '
-      'passed. Screenshots: ${screenshots.path}; video: ${output.path}',
+      'Patrol task lifecycle '
+      'passed. Screenshots: ${screenshots.path}; artifacts: ${output.path}',
     );
   } catch (error) {
     stderr.writeln('$error\n$_usage');
@@ -300,21 +331,32 @@ Future<void> main(List<String> arguments) async {
   }
 }
 
-/// Replaces only this launcher's artifacts before a new test attempt.
-/// Unreached checkpoints must not look like screenshots from the current run.
+/// Clears previous run artifacts while preserving golden references.
 void preparePatrolArtifacts(Directory output, {Directory? screenshots}) {
   output.createSync(recursive: true);
   final screenshotDirectory = screenshots ?? output;
   screenshotDirectory.createSync(recursive: true);
-  final screenshot = RegExp(r'^\d{2}_[a-z0-9_]+\.png$');
+  final screenshot = RegExp(r'^\d{2}_[a-z0-9_]+_FAILED\.png$');
   for (final entry in screenshotDirectory.listSync(followLinks: false)) {
     if (entry is File && screenshot.hasMatch(entry.uri.pathSegments.last)) {
       entry.deleteSync();
     }
   }
+  final captures = Directory('${output.path}/screenshots');
+  if (captures.existsSync()) {
+    for (final entry in captures.listSync(followLinks: false)) {
+      if (entry is File &&
+          RegExp(
+            r'^\d{2}_[a-z0-9_]+\.png$',
+          ).hasMatch(entry.uri.pathSegments.last)) {
+        entry.deleteSync();
+      }
+    }
+  }
   const diagnostics = {
     'test.mp4',
     'recording.txt',
+    'screenshot_comparison.json',
     'instrumentation.txt',
     'device.log',
   };
@@ -333,12 +375,11 @@ Future<void> collectPatrolScreenshots(
   Future<String> Function(List<String>, {Duration timeout}) onDevice,
   Directory output,
   String runId, {
-  bool stopAfterHome = false,
   Directory? screenshots,
 }) async {
   if (!RegExp(r'^\d+$').hasMatch(runId)) throw ArgumentError('Invalid run ID.');
   // Native filenames include a timestamp and run ID. Keep those on-device to
-  // reject stale captures, but use fixed numbered filenames for Git history.
+  // reject stale captures, and collect actuals separately from golden references.
   const remoteRoot = '/sdcard/Download/screenshots/$_testClass';
   final listing = await onDevice(['shell', 'find', remoteRoot, '-type', 'f']);
   final pattern = RegExp(
@@ -362,11 +403,18 @@ Future<void> collectPatrolScreenshots(
   final captured = <String>{};
   final points = latest.keys.toList()..sort();
   for (final point in points) {
-    final local = File('${(screenshots ?? output).path}/$point.png');
+    final local = File('${output.path}/screenshots/$point.png');
     await local.parent.create(recursive: true);
     await onDevice(['pull', latest[point]!.remote, local.absolute.path]);
     if (!local.existsSync() || local.lengthSync() == 0) {
       throw StateError('Empty screenshot: $point.png');
+    }
+    if (point == '99_failure') {
+      final failed = File(
+        '${(screenshots ?? output).path}/${point}_FAILED.png',
+      );
+      await failed.parent.create(recursive: true);
+      await local.copy(failed.path);
     }
     captured.add(point);
   }
@@ -381,18 +429,16 @@ Future<void> collectPatrolScreenshots(
       '01_sign_in_required',
       '04_tasks_consent',
       '06_home',
-      if (!stopAfterHome) ...[
-        '07_new_task_form',
-        '08_created',
-        '09_edited_task_form',
-        '10_edited',
-        '11_before_delete',
-        '12_delete_confirmation',
-        '13_deleted',
-        '14_sign_out_confirmation',
-        '15_sign_in_required',
-        '16_sign_in_canceled',
-      ],
+      '07_new_task_form',
+      '08_created',
+      '09_edited_task_form',
+      '10_edited',
+      '11_before_delete',
+      '12_delete_confirmation',
+      '13_deleted',
+      '14_sign_out_confirmation',
+      '15_sign_in_required',
+      '16_sign_in_canceled',
     ]) {
       if (!captured.contains(point)) {
         throw StateError('Required screenshot missing: $point');

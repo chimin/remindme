@@ -54,6 +54,7 @@ app.*.map.json
 # Keep diagnostic logs and older run directories local.
 /patrol_test/golden/*
 !/patrol_test/golden/test.mp4
+/patrol_test/main_test.dart
 /patrol_test/test_bundle.dart
 
 /ios/Flutter/Google.xcconfig

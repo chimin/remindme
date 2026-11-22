@@ -1,7 +1,23 @@
-﻿targets:
+targets:
   $default:
+    sources:
+      exclude:
+        - patrol_test/**
     builders:
       bdd_widget_test|featureBuilder:
         options:
           customHeaders:
             - "import 'package:flutter_test/flutter_test.dart';"
+  patrol:
+    sources:
+      - patrol_test/**
+    dependencies:
+      - :$default
+    builders:
+      bdd_widget_test|featureBuilder:
+        options:
+          includeIntegrationTestBinding: false
+          customHeaders:
+            - "import 'package:flutter_test/flutter_test.dart';"
+            - "import 'package:patrol/patrol.dart';"
+            - "import 'support/task_lifecycle.dart';"

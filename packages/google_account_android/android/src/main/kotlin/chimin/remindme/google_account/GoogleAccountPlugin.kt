@@ -5,9 +5,11 @@ import android.accounts.AccountManager
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.ClearTokenRequest
 import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.auth.api.identity.RevokeAccessRequest
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Scope
@@ -56,6 +58,10 @@ class GoogleAccountPlugin : FlutterPlugin, ActivityAware,
         pending = null
         result?.error(code, message, null)
     }
+    private fun isPatrolBuild(): Boolean {
+        val resource = context.resources.getIdentifier("patrol_e2e", "bool", context.packageName)
+        return resource != 0 && context.resources.getBoolean(resource)
+    }
     private fun failure(result: MethodChannel.Result, error: Exception) {
         val code = if (error is ApiException) when (error.statusCode) {
             CommonStatusCodes.CANCELED -> "canceled"
@@ -77,6 +83,32 @@ class GoogleAccountPlugin : FlutterPlugin, ActivityAware,
                     host.startActivityForResult(AccountManager.newChooseAccountIntent(null, null, arrayOf("com.google"), null, null, null, null), requestCode)
                 } catch (error: Exception) { finishError("temporary", "Unable to open the Google account chooser.") }
             }
+            "revokeAccessForPatrol" -> {
+                if (!isPatrolBuild()) { result.notImplemented(); return }
+                val email = call.argument<String>("email")
+                if (email.isNullOrBlank()) { result.error("configuration", "A test account is required.", null); return }
+                val request = RevokeAccessRequest.builder()
+                    .setAccount(Account(email, "com.google"))
+                    .setScopes(listOf(Scope("https://www.googleapis.com/auth/tasks")))
+                    .build()
+                Identity.getAuthorizationClient(context).revokeAccess(request)
+                    .addOnSuccessListener {
+                        Log.i("flutter", "Patrol Google Tasks authorization reset completed")
+                        result.success(true)
+                    }
+                    .addOnFailureListener {
+                        // No token can be revoked; the test must still observe fresh consent.
+                        if (it is ApiException &&
+                            it.statusCode == CommonStatusCodes.DEVELOPER_ERROR &&
+                            it.statusMessage == "[28470] No access token was returned") {
+                            Log.i("flutter", "Patrol Google Tasks reset found no token; fresh consent is still required")
+                            result.success(false)
+                        } else {
+                            Log.e("flutter", "Patrol Google Tasks authorization reset failed", it)
+                            failure(result, it)
+                        }
+                    }
+            }
             "authorize" -> {
                 val email = call.argument<String>("email")
                 if (email.isNullOrBlank()) { result.error("configuration", "Please sign in to continue.", null); return }
@@ -87,6 +119,7 @@ class GoogleAccountPlugin : FlutterPlugin, ActivityAware,
                     .setRequestedScopes(listOf(Scope("https://www.googleapis.com/auth/tasks")))
                     .build()
                 client.authorize(request).addOnSuccessListener { authorization ->
+                    if (isPatrolBuild()) Log.i("flutter", "Patrol Google authorize: hasResolution=" + authorization.hasResolution())
                     if (!authorization.hasResolution()) {
                         val token = authorization.accessToken
                         if (token == null) result.error("interaction_required", "Please sign in again.", null)
