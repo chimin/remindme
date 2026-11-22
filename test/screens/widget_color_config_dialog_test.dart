@@ -283,7 +283,7 @@ void main() {
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile(
-        '../../screenshots/widget_color_config_dialog/widget_color_config_dialog_when_reset_confirmation.png',
+        '../../features/screenshots/widget_color_config_dialog/widget_color_config_dialog_when_reset_confirmation.png',
       ),
     );
     await tester.tap(find.widgetWithText(FilledButton, 'Reset'));
@@ -295,7 +295,7 @@ void main() {
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile(
-        '../../screenshots/widget_color_config_dialog/widget_color_config_dialog_when_reset.png',
+        '../../features/screenshots/widget_color_config_dialog/widget_color_config_dialog_when_reset.png',
       ),
     );
     await tester.tap(find.text('Save appearance'));
@@ -340,7 +340,7 @@ void main() {
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile(
-        '../../screenshots/widget_color_config_dialog/widget_color_config_dialog_when_reset_confirmation.png',
+        '../../features/screenshots/widget_color_config_dialog/widget_color_config_dialog_when_reset_confirmation.png',
       ),
     );
     await tester.tap(find.text('Cancel').last);

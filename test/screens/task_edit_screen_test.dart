@@ -72,7 +72,7 @@ void main() {
     await expectLater(
       find.byKey(boundaryKey),
       matchesGoldenFile(
-        '../../screenshots/task_edit_screen/task_edit_screen_when_displayed.png',
+        '../../features/screenshots/task_edit_screen/task_edit_screen_when_displayed.png',
       ),
     );
   });
@@ -155,7 +155,7 @@ void main() {
       await expectLater(
         find.byKey(const ValueKey('delete-editor-screen')),
         matchesGoldenFile(
-          '../../screenshots/task_edit_screen/task_edit_screen_when_delete_confirmation.png',
+          '../../features/screenshots/task_edit_screen/task_edit_screen_when_delete_confirmation.png',
         ),
       );
       await tester.tap(find.text('Cancel'));
@@ -282,7 +282,7 @@ void main() {
       await expectLater(
         find.byKey(const ValueKey('editor')),
         matchesGoldenFile(
-          '../../screenshots/task_edit_screen/task_edit_screen_when_repeat.png',
+          '../../features/screenshots/task_edit_screen/task_edit_screen_when_repeat.png',
         ),
       );
       await tester.tap(find.byTooltip('Save task'));
@@ -444,7 +444,7 @@ void main() {
       await expectLater(
         find.byKey(const ValueKey('editor')),
         matchesGoldenFile(
-          '../../screenshots/task_edit_screen/task_edit_screen_when_incomplete.png',
+          '../../features/screenshots/task_edit_screen/task_edit_screen_when_incomplete.png',
         ),
       );
     },
@@ -506,7 +506,7 @@ void main() {
     await expectLater(
       find.byKey(const ValueKey('editor')),
       matchesGoldenFile(
-        '../../screenshots/task_edit_screen/task_edit_screen_when_completed.png',
+        '../../features/screenshots/task_edit_screen/task_edit_screen_when_completed.png',
       ),
     );
   });

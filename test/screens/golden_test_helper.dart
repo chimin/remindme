@@ -8,6 +8,8 @@ import 'package:googleapis/tasks/v1.dart';
 
 import 'package:remindme/services/tasks_repository.dart';
 
+import '../support/screenshot_comparator.dart';
+
 class MockTasksRepository extends TasksRepository {
   bool _signedIn = false;
   String? _selectedTasklistId;
@@ -94,21 +96,21 @@ class MockTasksRepository extends TasksRepository {
 const double kGoldenDiffThreshold = 5.0;
 
 const String kLoginGoldenPath =
-    'screenshots/login_screen/login_screen_when_displayed.png';
+    'features/screenshots/login_screen/login_screen_when_displayed.png';
 const String kTaskHomeGoldenPath =
-    'screenshots/task_home_screen/task_home_screen_when_displayed.png';
+    'features/screenshots/task_home_screen/task_home_screen_when_displayed.png';
 const String kTaskHomeListSwitcherGoldenPath =
-    'screenshots/task_home_screen/task_home_screen_when_list_switcher.png';
+    'features/screenshots/task_home_screen/task_home_screen_when_list_switcher.png';
 const String kTaskEditGoldenPath =
-    'screenshots/task_edit_screen/task_edit_screen_when_displayed.png';
+    'features/screenshots/task_edit_screen/task_edit_screen_when_displayed.png';
 const String kSignOutDialogGoldenPath =
-    'screenshots/sign_out_dialog/sign_out_dialog_when_displayed.png';
+    'features/screenshots/sign_out_dialog/sign_out_dialog_when_displayed.png';
 const String kWidgetColorConfigGoldenPath =
-    'screenshots/widget_color_config_dialog/widget_color_config_dialog_when_displayed.png';
+    'features/screenshots/widget_color_config_dialog/widget_color_config_dialog_when_displayed.png';
 const String kWidgetColorPickerDialogGoldenPath =
-    'screenshots/widget_color_picker_dialog/widget_color_picker_dialog_when_displayed.png';
+    'features/screenshots/widget_color_picker_dialog/widget_color_picker_dialog_when_displayed.png';
 const String kTaskHomeMenuGoldenPath =
-    'screenshots/task_home_screen/task_home_screen_when_menu.png';
+    'features/screenshots/task_home_screen/task_home_screen_when_menu.png';
 const String kReportPath = 'test/reports/golden_comparison_report.md';
 
 Future<ui.Image> decodePng(Uint8List bytes) async {
@@ -153,6 +155,7 @@ Future<Map<String, dynamic>> captureAndCompare(
       debugPrint('Saved golden: $goldenPath');
       await goldenFile.parent.create(recursive: true);
       await goldenFile.writeAsBytes(pngBytes.buffer.asUint8List());
+      await clearFailedScreenshot(goldenFile);
       result['diffPct'] = 0.0;
       result['pass'] = true;
       result['goldenMissing'] = true;
@@ -160,8 +163,9 @@ Future<Map<String, dynamic>> captureAndCompare(
       return result;
     }
     image.dispose();
-    final goldenImage = await decodePng(await goldenFile.readAsBytes());
+    ui.Image? goldenImage;
     try {
+      goldenImage = await decodePng(await goldenFile.readAsBytes());
       final goldenRaw = await goldenImage.toByteData(
         format: ui.ImageByteFormat.rawRgba,
       );
@@ -171,8 +175,16 @@ Future<Map<String, dynamic>> captureAndCompare(
       final diffPct = computeDiffPct(raw, goldenRaw);
       result['diffPct'] = diffPct;
       result['pass'] = diffPct <= kGoldenDiffThreshold;
+      if (result['pass'] as bool) {
+        await clearFailedScreenshot(goldenFile);
+      } else {
+        await saveFailedScreenshot(goldenFile, pngBytes.buffer.asUint8List());
+      }
+    } catch (_) {
+      await saveFailedScreenshot(goldenFile, pngBytes.buffer.asUint8List());
+      rethrow;
     } finally {
-      goldenImage.dispose();
+      goldenImage?.dispose();
     }
     return result;
   }))!;

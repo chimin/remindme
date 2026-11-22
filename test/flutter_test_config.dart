@@ -3,8 +3,16 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/screenshot_comparator.dart';
+
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
+  final comparator = goldenFileComparator;
+  if (comparator is LocalFileComparator) {
+    goldenFileComparator = ScreenshotComparator(
+      comparator.basedir.resolve('test.dart'),
+    );
+  }
 
   setUp(() {
     // 360 x 640 logical pixels, matching the project's golden screenshots.

@@ -234,9 +234,9 @@ void main() {
   test(
     'collect screenshots should preserve other baselines when diagnostics and screenshots use separate directories',
     () async {
-      final screenshots = Directory('${output.path}/screenshots/e2e');
+      final screenshots = Directory('${output.path}/features/screenshots/e2e');
       final baseline = File(
-        '${output.path}/screenshots/login_screen/login_screen_when_displayed.png',
+        '${output.path}/features/screenshots/login_screen/login_screen_when_displayed.png',
       );
       final capture = File('${screenshots.path}/01_sign_in_required.png');
       await baseline.parent.create(recursive: true);

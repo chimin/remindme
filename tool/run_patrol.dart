@@ -150,12 +150,12 @@ Future<void> main(List<String> arguments) async {
         'run',
         'build_runner',
         'build',
-        '--build-filter=patrol_test/main_test.dart',
+        '--build-filter=patrol_test/e2e_test.dart',
       ],
       timeout: const Duration(minutes: 5),
       echo: true,
     );
-    if (!File('patrol_test/main_test.dart').existsSync()) {
+    if (!File('patrol_test/e2e_test.dart').existsSync()) {
       throw StateError('Generated Patrol test is missing.');
     }
 
@@ -181,7 +181,7 @@ Future<void> main(List<String> arguments) async {
         '--build-number',
         '$buildNumber',
         '--target',
-        'patrol_test/main_test.dart',
+        'patrol_test/e2e_test.dart',
         '--dart-define-from-file',
         File(config).absolute.path,
         '--dart-define',
@@ -224,7 +224,7 @@ Future<void> main(List<String> arguments) async {
     }
 
     final output = Directory('patrol_test/golden');
-    final screenshots = Directory('screenshots/e2e');
+    final screenshots = Directory('features/screenshots/e2e');
     preparePatrolArtifacts(output, screenshots: screenshots);
     final recording = recordVideo
         ? PatrolVideoRecorder(

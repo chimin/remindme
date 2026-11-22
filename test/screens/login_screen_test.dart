@@ -82,7 +82,7 @@ void main() {
     final screenshot = await captureAndCompare(
       tester,
       find.byType(MaterialApp),
-      'screenshots/login_screen/login_screen_when_sign_in_required.png',
+      'features/screenshots/login_screen/login_screen_when_sign_in_required.png',
       'sign_in_required',
     );
     expect(screenshot['pass'], isTrue);

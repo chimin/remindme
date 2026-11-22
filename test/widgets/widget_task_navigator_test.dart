@@ -144,7 +144,7 @@ void main() {
       await expectLater(
         find.byType(MaterialApp),
         matchesGoldenFile(
-          '../../screenshots/widget_task_editor/widget_task_editor_when_displayed.png',
+          '../../features/screenshots/widget_task_editor/widget_task_editor_when_displayed.png',
         ),
       );
     },

@@ -88,7 +88,7 @@ void main() {
     final result = await captureAndCompare(
       tester,
       find.byType(MaterialApp),
-      'screenshots/reminder_settings_dialog/reminder_settings_dialog_when_displayed.png',
+      'features/screenshots/reminder_settings_dialog/reminder_settings_dialog_when_displayed.png',
       'Reminder settings',
     );
     expect(result['pass'], isTrue);
@@ -111,7 +111,7 @@ void main() {
     final result = await captureAndCompare(
       tester,
       find.byType(MaterialApp),
-      'screenshots/reminder_settings_dialog/reminder_settings_dialog_when_time_picker_open.png',
+      'features/screenshots/reminder_settings_dialog/reminder_settings_dialog_when_time_picker_open.png',
       'Reminder time picker',
     );
     expect(result['pass'], isTrue);

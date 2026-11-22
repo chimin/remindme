@@ -1,3 +1,6 @@
+// These Cucumber steps run only in tests, despite living outside test/.
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
 import 'dart:io';
 
 import 'package:flutter/services.dart';

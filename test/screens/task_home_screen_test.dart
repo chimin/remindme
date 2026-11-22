@@ -114,7 +114,7 @@ void main() {
       final result = await captureAndCompare(
         tester,
         find.byType(MaterialApp),
-        'screenshots/task_home_screen/task_home_screen_when_sign_in_required.png',
+        'features/screenshots/task_home_screen/task_home_screen_when_sign_in_required.png',
         'sign_in_required',
       );
       expect(result['pass'], isTrue);
@@ -166,7 +166,7 @@ void main() {
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile(
-        '../../screenshots/task_home_screen/task_home_screen_when_delete_confirmation.png',
+        '../../features/screenshots/task_home_screen/task_home_screen_when_delete_confirmation.png',
       ),
     );
     await tester.tap(find.text('Cancel'));
@@ -235,7 +235,7 @@ void main() {
           await expectLater(
             find.byType(MaterialApp),
             matchesGoldenFile(
-              '../../screenshots/task_home_screen/task_home_screen_when_cached_startup.png',
+              '../../features/screenshots/task_home_screen/task_home_screen_when_cached_startup.png',
             ),
           );
         }
@@ -381,7 +381,7 @@ void main() {
         await expectLater(
           find.byType(MaterialApp),
           matchesGoldenFile(
-            '../../screenshots/task_home_screen/task_home_screen_when_$variant.png',
+            '../../features/screenshots/task_home_screen/task_home_screen_when_$variant.png',
           ),
         );
       },
@@ -511,7 +511,7 @@ void main() {
       final screenshot = await captureAndCompare(
         tester,
         find.byType(MaterialApp),
-        'screenshots/task_home_screen/task_home_screen_when_delete_progress_popup.png',
+        'features/screenshots/task_home_screen/task_home_screen_when_delete_progress_popup.png',
         'Delete completed tasks progress',
       );
       expect(screenshot['pass'], isTrue);
@@ -784,7 +784,7 @@ void main() {
       await expectLater(
         find.byType(MaterialApp),
         matchesGoldenFile(
-          '../../screenshots/task_home_screen/task_home_screen_when_completed.png',
+          '../../features/screenshots/task_home_screen/task_home_screen_when_completed.png',
         ),
       );
     },
@@ -1367,7 +1367,7 @@ void main() {
       await expectLater(
         find.byType(MaterialApp),
         matchesGoldenFile(
-          '../../screenshots/delete_completed_tasks_dialog/delete_completed_tasks_dialog_when_displayed.png',
+          '../../features/screenshots/delete_completed_tasks_dialog/delete_completed_tasks_dialog_when_displayed.png',
         ),
       );
       await tester.tap(find.text('Cancel'));

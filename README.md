@@ -55,22 +55,23 @@ For IntelliJ, add `--dart-define-from-file=secrets/build.json` to the Flutter ru
 ## Analyze and test
 
 ```powershell
+dart run build_runner build
 flutter analyze
 flutter test --dart-define=GOOGLE_WEB_CLIENT_ID=test123
 ```
 
 ### Gherkin smoke test
 
-This widget test checks the fresh-install login screen without a device or Google account. After editing its `.feature` or step files, regenerate and run:
+This widget test checks the fresh-install login screen without a device or Google account. Edit `features/login_screen_gherkin.feature` or steps in `features/steps/login_screen/`, then regenerate and run:
 
 ```powershell
 dart run build_runner build
 flutter test test/screens/login_screen_gherkin_test.dart --dart-define=GOOGLE_WEB_CLIENT_ID=test123
 ```
 
-Commit the generated test; do not edit it directly. The screenshot is saved to `screenshots/login_screen/login_screen_when_newly_installed.png`.
+Generated widget tests are written to `test/screens/` and excluded from Git. Regenerate them after cloning or changing a feature; do not edit them directly. The screenshot is saved to `features/screenshots/login_screen/login_screen_when_newly_installed.png`.
 
-In IntelliJ, run `main()` in the generated Dart test. Set **Additional run args** to `--dart-define=GOOGLE_WEB_CLIENT_ID=test123` and the working directory to the repository root.
+In IntelliJ, run `main()` in `test/screens/login_screen_gherkin_test.dart`. Set **Additional run args** to `--dart-define=GOOGLE_WEB_CLIENT_ID=test123` and the working directory to the repository root.
 
 ## Patrol E2E test (Android, manual only)
 
@@ -104,15 +105,15 @@ Append these options as needed:
 | `--update-goldens` | Create or replace captured golden references for review instead of asserting a visual match. |
 | `--help` | Show options without building or running tests. |
 
-Edit `patrol_test/main.feature` and step/support files; do not commit generated Patrol runners. Add a blank line before a `When` clause that follows a `Then` clause.
+Edit `features/e2e.feature` and steps in `features/steps/app_journey/`. Shared Patrol helpers remain in `patrol_test/support/`. The launcher generates `patrol_test/e2e_test.dart`; do not commit generated Patrol runners. Add a blank line before a `When` clause that follows a `Then` clause.
 
 ### Review results and troubleshoot
 
 | Output | Location |
 | --- | --- |
-| Golden references | `screenshots/e2e/<2_digits_sequence>_<description>.png` |
+| Golden references | `features/screenshots/e2e/<2_digits_sequence>_<description>.png` |
 | Current captures | `patrol_test/golden/screenshots/` |
-| Failed comparisons | `screenshots/e2e/*_FAILED.png` |
+| Failed comparisons | `features/screenshots/e2e/*_FAILED.png` |
 | Comparison report | `patrol_test/golden/screenshot_comparison.json` |
 | Video | `patrol_test/golden/test.mp4` |
 | Logs | `patrol_test/golden/device.log`, `instrumentation.txt`, and `recording.txt` |
@@ -140,7 +141,9 @@ The default AVD is `RemindMe_Test`. Append `-Pavd=YourAvd` to change it or `-Psk
 
 The task captures the task list, add-task screen, and home-screen widget using fixture data without Google sign-in. Files are saved to `android/screenshots/<page/component>/`. Rebuild/install the normal app afterwards.
 
-Use `<page/component>_when_<what_happen>.png` for Flutter and Android screenshots. Store Flutter images under `screenshots/<page/component>/`.
+Use `<page/component>_when_<what_happen>.png` for Flutter and Android screenshots. Store Flutter images under `features/screenshots/<page/component>/`.
+
+Failed Flutter and Patrol comparisons save the actual image beside its reference as `<reference_name>_FAILED.png`. Include these images in Git for review. Passing comparisons and golden updates remove stale failure images.
 
 ## Update branding assets
 

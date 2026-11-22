@@ -50,11 +50,12 @@ app.*.map.json
 # Generated previews and temporary review artifacts
 /output/
 
-# Track Patrol video for Git comparisons; screenshots live in screenshots/e2e.
+# Track Patrol video for Git comparisons; screenshots live in features/screenshots/e2e.
 # Keep diagnostic logs and older run directories local.
 /patrol_test/golden/*
 !/patrol_test/golden/test.mp4
-/patrol_test/main_test.dart
+/test/screens/login_screen_gherkin_test.dart
+/patrol_test/e2e_test.dart
 /patrol_test/test_bundle.dart
 
 /ios/Flutter/Google.xcconfig

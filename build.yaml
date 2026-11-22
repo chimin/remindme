@@ -1,21 +1,56 @@
+builders:
+  feature_tests:
+    import: "tool/feature_builder.dart"
+    builder_factories: ["featureTests"]
+    build_extensions:
+      "^features/{{}}.feature": ["test/screens/{{}}_test.dart"]
+    build_to: source
+    auto_apply: none
+  patrol_feature_tests:
+    import: "tool/feature_builder.dart"
+    builder_factories: ["patrolFeatureTests"]
+    build_extensions:
+      "^features/{{}}.feature": ["patrol_test/{{}}_test.dart"]
+    build_to: source
+    auto_apply: none
+
 targets:
   $default:
     sources:
+      include:
+        - $package$
+        - lib/**
+        - test/**
+        - tool/**
+        - features/**
+        - pubspec.yaml
+        - build.yaml
       exclude:
-        - patrol_test/**
+        - features/e2e.feature
+        - features/steps/app_journey/**
     builders:
       bdd_widget_test|featureBuilder:
+        enabled: false
+      remindme|feature_tests:
+        enabled: true
         options:
+          stepFolderName: ../../features/steps/login_screen
           customHeaders:
             - "import 'package:flutter_test/flutter_test.dart';"
   patrol:
     sources:
+      - features/e2e.feature
+      - features/steps/app_journey/**
       - patrol_test/**
     dependencies:
       - :$default
     builders:
       bdd_widget_test|featureBuilder:
+        enabled: false
+      remindme|patrol_feature_tests:
+        enabled: true
         options:
+          stepFolderName: ../features/steps/app_journey
           includeIntegrationTestBinding: false
           customHeaders:
             - "import 'package:flutter_test/flutter_test.dart';"
