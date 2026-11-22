@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'services/sync_service.dart';
+import 'services/reminder_service.dart';
 import 'services/auth_repository.dart';
 import 'services/tasks_repository.dart';
 import 'screens/login_screen.dart';
@@ -26,7 +28,13 @@ Future<void> startApp({AuthRepository? authRepository}) async {
 
   // Let the loading UI paint before starting storage and platform work.
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    unawaited(repo.init());
+    unawaited(() async {
+      await repo.init();
+      if (repo.hasLinkedAccount) {
+        await ReminderService.requestPermission();
+        await repo.refreshReminders(notifyNow: true);
+      }
+    }());
     unawaited(_initializeBackgroundSync(syncService));
   });
 }
@@ -48,7 +56,39 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    ReminderService.channel.setMethodCallHandler((MethodCall call) async {
+      if (call.method == 'openHome') {
+        _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    ReminderService.channel.setMethodCallHandler(null);
+    super.dispose();
+  }
+
+  bool _wasInBackground = false;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _wasInBackground = true;
+    } else if (state == AppLifecycleState.resumed && _wasInBackground) {
+      _wasInBackground = false;
+      final repo = context.read<TasksRepository>();
+      if (repo.initialized) unawaited(repo.refreshReminders(notifyNow: true));
+    }
+  }
+
   final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override

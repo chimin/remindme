@@ -370,3 +370,23 @@ The tag sets Android `versionName` to `1.2.3` and `versionCode` to `1002003`, us
 The AAB is also retained as a workflow artifact. Google Play review and account publishing settings determine when the submitted release becomes available to users. Manual workflow runs never publish to Play.
 
 Release notes are generated automatically from commit subjects between the highest earlier version tag reachable from the current commit and the current tag. The first version includes all commit history. Notes are uploaded in English (en-US), oldest commit first, and truncated to Google Play's 500-character limit. If there are no new commits, the notes say so.
+
+## Daily reminders
+
+Open the task home menu and choose **Reminder settings**. Reminders default to enabled at 8:00 AM local time and summarize incomplete overdue and today tasks from the selected list. Save applies changes; Cancel discards them.
+
+Opening or returning to the app refreshes and shows the current summary when reminders are enabled and tasks qualify.
+
+Android maintains one inexact alarm and builds the summary from the latest cached snapshot when it fires. Delivery can be delayed by battery restrictions. Scheduling is restored after reboot, app updates, and clock or timezone changes; missed reminders are not sent as catch-up alerts. No exact-alarm permission is used.
+
+iOS schedules summaries for the next 60 calendar days. These summaries reflect cached tasks when scheduled. App use and background sync replace and replenish the schedule; background execution at the reminder time is not required. Local timezone changes are reconciled when the app next runs. Remote task changes require sync on both platforms. Disabling reminders or signing out cancels pending and displayed reminders; sign-out also clears reminder task data.
+
+The native implementation is in `packages/daily_reminders`. Flutter regression tests cover settings and serialized updates, and Android instrumentation coverage is in `DailyRemindersPluginTest`. Run device tests on an isolated emulator:
+
+```powershell
+$env:ANDROID_SERIAL = 'emulator-5554'
+Set-Location android
+.\gradlew.bat :app:connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=chimin.remindme.DailyRemindersPluginTest'
+```
+
+Android notification screenshots are written under the app's external test output and copied to `android/screenshots/daily_reminder`. Flutter settings screenshots are under `screenshots/reminder_settings_dialog`. iOS delivery, foreground presentation, taps, and scheduling still require validation with Xcode and an iOS device or simulator.

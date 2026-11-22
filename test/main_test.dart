@@ -26,6 +26,13 @@ class _PendingAuth extends AuthRepository {
 }
 
 class _RetryRepository extends TasksRepository {
+  final reminderRequests = <bool>[];
+
+  @override
+  Future<void> refreshReminders({bool notifyNow = false}) async {
+    reminderRequests.add(notifyNow);
+  }
+
   @override
   Future<void> signIn() async {}
   @override
@@ -107,6 +114,29 @@ void main() {
       await tester.tap(find.text('Retry'));
       await tester.pumpAndSettle();
       expect(find.byType(LoginScreen), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      repo.dispose();
+    },
+  );
+  testWidgets(
+    'resume should trigger an updated reminder when the app returns from background',
+    (tester) async {
+      final repo = _RetryRepository()..initialized = true;
+      await tester.pumpWidget(
+        ChangeNotifierProvider<TasksRepository>.value(
+          value: repo,
+          child: const MyApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final binding = tester.binding;
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      expect(repo.reminderRequests, isEmpty);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      expect(repo.reminderRequests, [true]);
       await tester.pumpWidget(const SizedBox());
       repo.dispose();
     },

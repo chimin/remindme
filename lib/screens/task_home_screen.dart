@@ -15,9 +15,11 @@ import '../widgets/trailing_checked_menu_item.dart';
 import '../widgets/delete_task_confirmation_dialog.dart';
 import 'task_edit_screen.dart';
 import 'widget_color_config_dialog.dart';
+import 'reminder_settings_dialog.dart';
+import '../services/reminder_service.dart';
 
 /// Actions available from the app bar overflow menu.
-enum _AppBarAction { widgetColors, signOut }
+enum _AppBarAction { widgetColors, reminders, signOut }
 
 /// Home screen listing the tasks of the selected Google task list.
 ///
@@ -454,6 +456,15 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
       case _AppBarAction.widgetColors:
         await _openWidgetColorConfig();
         break;
+      case _AppBarAction.reminders:
+        final settings = await ReminderSettings.load();
+        if (!mounted) return;
+        final saved = await showDialog<ReminderSettings>(
+          context: context,
+          builder: (_) => ReminderSettingsDialog(settings: settings),
+        );
+        if (saved != null) await _getRepo().saveReminderSettings(saved);
+        break;
       case _AppBarAction.signOut:
         await _signOut();
         break;
@@ -620,6 +631,10 @@ class _TaskHomeScreenState extends State<TaskHomeScreen> {
               const PopupMenuItem(
                 value: _AppBarAction.widgetColors,
                 child: Text('Widget appearance'),
+              ),
+              const PopupMenuItem(
+                value: _AppBarAction.reminders,
+                child: Text('Reminder settings'),
               ),
               const PopupMenuItem(
                 value: _AppBarAction.signOut,

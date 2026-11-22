@@ -14,6 +14,7 @@ import 'auth_repository.dart';
 import 'google_account_provider.dart';
 import 'task_storage_lease.dart';
 import 'widget_service.dart';
+import 'reminder_service.dart';
 
 /// Parses a Google Tasks `updated` RFC-3339 string to milliseconds since the
 /// epoch, or null when absent/unparsable.
@@ -242,6 +243,39 @@ class TasksRepository extends ChangeNotifier {
     _updateTasksApi();
   }
 
+  final _reminders = ReminderService();
+
+  Future<void> refreshReminders({bool notifyNow = false}) =>
+      _reminders.refresh(() async {
+        final id = _selectedTasklistId;
+        if (!signedIn || _signingOut || id == null) {
+          return {'active': false, 'tasks': <Object>[]};
+        }
+        final entries = await _readCacheEntries(id);
+        if (!signedIn || _signingOut || id != _selectedTasklistId) {
+          return {'active': false, 'tasks': <Object>[]};
+        }
+        return {
+          'active': true,
+          'tasks': entries.map((entry) {
+            final due = DateTime.tryParse(entry.due ?? '');
+            return {
+              'title': entry.title ?? '(Untitled)',
+              'completed': entry.completed || entry.status == 'completed',
+              'deleted': entry.isDeleted,
+              'year': due?.year,
+              'month': due?.month,
+              'day': due?.day,
+            };
+          }).toList(),
+        };
+      }, notifyNow: notifyNow);
+
+  Future<void> saveReminderSettings(ReminderSettings settings) async {
+    await settings.save();
+    await refreshReminders();
+  }
+
   final AuthRepository _auth;
   final bool _ownsAuth;
   final TaskStorageLease _storageLease;
@@ -326,6 +360,7 @@ class TasksRepository extends ChangeNotifier {
         );
       }
       initialized = true;
+      unawaited(refreshReminders());
     } catch (error, stack) {
       initializationError = 'Unable to initialize local data';
       logError('Unable to initialize repository', error, stack);
@@ -347,7 +382,11 @@ class TasksRepository extends ChangeNotifier {
   }
 
   Future<void> signIn() async {
-    if (!_signingOut) await _auth.signIn();
+    if (!_signingOut) {
+      await _auth.signIn();
+      if (signedIn) await ReminderService.requestPermission();
+      await refreshReminders(notifyNow: true);
+    }
   }
 
   Future<void> requestAuthorization() => _auth.requestAuthorization();
@@ -420,6 +459,7 @@ class TasksRepository extends ChangeNotifier {
     if (_signingOut) return;
     _signingOut = true;
     notifyListeners();
+    await refreshReminders();
     try {
       await _withTaskLock(() async {
         await _auth.signOut();
@@ -481,6 +521,7 @@ class TasksRepository extends ChangeNotifier {
     _selectedTasklistId = id;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kPrefKey, id);
+    await refreshReminders();
     notifyListeners();
   }
 
@@ -617,6 +658,7 @@ class TasksRepository extends ChangeNotifier {
       _cacheKey(tasklistId),
       entries.map((e) => e.toJson()).toList(),
     );
+    if (tasklistId == _selectedTasklistId) await refreshReminders();
     if (!_disposed) notifyListeners();
   }
 

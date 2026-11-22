@@ -37,6 +37,7 @@ Future<bool> runBackgroundSync({
     if (!repository.initialized || repository.initializationError != null) {
       return false;
     }
+    await repository.refreshReminders();
     if (!repository.hasLinkedAccount || repository.requiresReconnect) {
       return true;
     }

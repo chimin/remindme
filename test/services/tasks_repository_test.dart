@@ -73,6 +73,49 @@ void main() {
         }, () => MockClient(server.handle));
 
     test(
+      'refresh reminders should mirror selected cached tasks when offline',
+      () => run(() async {
+        final snapshots = <Map<dynamic, dynamic>>[];
+        const channel = MethodChannel('chimin.remindme/reminders');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              if (call.method == 'replace')
+                snapshots.add(call.arguments as Map);
+              return null;
+            });
+        addTearDown(
+          () => TestDefaultBinaryMessengerBinding
+              .instance
+              .defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null),
+        );
+        server.offline = true;
+        await repo.saveCacheEntries('other', [
+          CachedTask(id: 'other', tasklistId: 'other', title: 'Other list'),
+        ]);
+        await repo.refreshReminders();
+        expect(
+          (snapshots.last['tasks'] as List).single['title'],
+          'Water plants',
+        );
+        await repo.selectTasklist('other');
+        expect((snapshots.last['tasks'] as List).single['title'], 'Other list');
+        await repo.saveCacheEntries('other', [
+          CachedTask(
+            id: 'other',
+            tasklistId: 'other',
+            title: 'Changed',
+            completed: true,
+          ),
+        ]);
+        expect((snapshots.last['tasks'] as List).single['completed'], true);
+        await repo.signOut();
+        expect(snapshots.last['active'], false);
+        expect(snapshots.last['tasks'], isEmpty);
+      }),
+    );
+
+    test(
       'initialize should leave the task box closed when the user is signed out',
       () async {
         await repo.init();
