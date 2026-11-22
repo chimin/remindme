@@ -1,3 +1,4 @@
+import '../scenario_runner.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -16,7 +17,8 @@ class _FreshInstallRepository extends TasksRepository {
   Future<void> signIn() async {}
 }
 
-Future<void> theUserOpensTheApp(WidgetTester tester) async {
+Future<void> theUserOpensTheApp(ScenarioState state) async {
+  final tester = state.tester!;
   final repo = _FreshInstallRepository();
   addTearDown(() async {
     await tester.pumpWidget(const SizedBox.shrink());

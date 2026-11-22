@@ -60,18 +60,29 @@ flutter analyze
 flutter test --dart-define=GOOGLE_WEB_CLIENT_ID=test123
 ```
 
-### Gherkin smoke test
+### Cucumber screen and widget tests
 
-This widget test checks the fresh-install login screen without a device or Google account. Edit `features/login_screen_gherkin.feature` or steps in `features/steps/login_screen/`, then regenerate and run:
+Nine maintained features cover login, reminder settings, task editing, task home, widget appearance, color picking, task deletion confirmation, checked menu items, and widget task navigation. The login feature also includes the fresh-install smoke scenario. All feature files live directly in `features/`; each feature's steps and typed scenario context live directly in `features/steps/<feature_basename>/`. Shared runner support lives in `features/steps/scenario_runner.dart`.
+
+Edit the feature and its category steps, then generate and run the ordinary suite. This PowerShell command runs tests only if generation succeeds:
 
 ```powershell
-dart run build_runner build
-flutter test test/screens/login_screen_gherkin_test.dart --dart-define=GOOGLE_WEB_CLIENT_ID=test123
+dart run build_runner build; if ($LASTEXITCODE -eq 0) { flutter test --dart-define=GOOGLE_WEB_CLIENT_ID=test123 }
 ```
 
-Generated widget tests are written to `test/screens/` and excluded from Git. Regenerate them after cloning or changing a feature; do not edit them directly. The screenshot is saved to `features/screenshots/login_screen/login_screen_when_newly_installed.png`.
+Ordinary feature runners are generated as `test/features/<feature_basename>_test.dart`. The entire `test/features/` directory is ignored by Git; maintained steps, helpers, screenshot references, and `_FAILED` images remain tracked. Regenerate after cloning or changing a feature, and do not edit generated tests.
 
-In IntelliJ, run `main()` in `test/screens/login_screen_gherkin_test.dart`. Set **Additional run args** to `--dart-define=GOOGLE_WEB_CLIENT_ID=test123` and the working directory to the repository root.
+To run one generated suite:
+
+```powershell
+flutter test test/features/login_screen_test.dart --dart-define=GOOGLE_WEB_CLIENT_ID=test123
+```
+
+In IntelliJ, generate first, then run `main()` in the desired generated test file. Set **Additional run args** to `--dart-define=GOOGLE_WEB_CLIENT_ID=test123` and the working directory to the repository root. Rerun generation after feature edits before using an IDE test action.
+
+UI scenarios use the widget runner; color parsing and formatting scenarios override it with the ordinary unit runner. Scenario continuations retain typed local values across Given/When/Then steps, and the Background initializes isolated state and failure cleanup. Font setup and platform mocks stay with their category.
+
+Screenshot paths, references, thresholds, and failed-image behavior remain unchanged. The fresh-install screenshot compares `features/screenshots/login_screen/login_screen_when_newly_installed.png` without replacing it.
 
 ## Patrol E2E test (Android, manual only)
 

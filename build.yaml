@@ -3,7 +3,7 @@ builders:
     import: "tool/feature_builder.dart"
     builder_factories: ["featureTests"]
     build_extensions:
-      "^features/{{}}.feature": ["test/screens/{{}}_test.dart"]
+      "^features/{{}}.feature": ["test/features/{{}}_test.dart"]
     build_to: source
     auto_apply: none
   patrol_feature_tests:
@@ -34,9 +34,7 @@ targets:
       remindme|feature_tests:
         enabled: true
         options:
-          stepFolderName: ../../features/steps/login_screen
-          customHeaders:
-            - "import 'package:flutter_test/flutter_test.dart';"
+          includeIntegrationTestBinding: false
   patrol:
     sources:
       - features/e2e.feature

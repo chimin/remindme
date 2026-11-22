@@ -54,7 +54,7 @@ app.*.map.json
 # Keep diagnostic logs and older run directories local.
 /patrol_test/golden/*
 !/patrol_test/golden/test.mp4
-/test/screens/login_screen_gherkin_test.dart
+/test/features/
 /patrol_test/e2e_test.dart
 /patrol_test/test_bundle.dart
 

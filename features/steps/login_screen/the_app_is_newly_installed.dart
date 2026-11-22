@@ -1,3 +1,4 @@
+import '../scenario_runner.dart';
 // These Cucumber steps run only in tests, despite living outside test/.
 // ignore_for_file: invalid_use_of_visible_for_testing_member
 
@@ -7,7 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Future<void> theAppIsNewlyInstalled(WidgetTester tester) async {
+Future<void> theAppIsNewlyInstalled(ScenarioState state) async {
+  final tester = state.tester!;
   SharedPreferences.setMockInitialValues({});
   addTearDown(() => SharedPreferences.setMockInitialValues({}));
   tester.view.devicePixelRatio = 1;
