@@ -25,6 +25,24 @@ class _ReminderSettingsDialogState extends State<ReminderSettingsDialog> {
     super.dispose();
   }
 
+  Future<void> _pickTime() async {
+    final parts = _timeController.text.split(':');
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: int.parse(parts[0]),
+        minute: int.parse(parts[1]),
+      ),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
+    );
+    if (time == null || !mounted) return;
+    _timeController.text =
+        '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
   void _save() {
     if (!_formKey.currentState!.validate()) return;
     final parts = _timeController.text.trim().split(':');
@@ -83,8 +101,8 @@ class _ReminderSettingsDialogState extends State<ReminderSettingsDialog> {
               const SizedBox(height: 8),
               TextFormField(
                 controller: _timeController,
-                keyboardType: TextInputType.datetime,
-                textInputAction: TextInputAction.done,
+                readOnly: true,
+                onTap: _pickTime,
                 decoration: InputDecoration(
                   hintText: '08:00',
                   suffixIcon: const Icon(Icons.access_time),
@@ -99,7 +117,6 @@ class _ReminderSettingsDialogState extends State<ReminderSettingsDialog> {
                     ).hasMatch(value?.trim() ?? '')
                     ? null
                     : 'Enter a time from 00:00 to 23:59',
-                onFieldSubmitted: (_) => _save(),
               ),
             ],
           ),

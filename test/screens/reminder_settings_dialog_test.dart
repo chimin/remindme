@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -100,22 +99,67 @@ void main() {
   ) async {
     ReminderSettings? saved;
     await open(tester, (value) => saved = value);
-    await tester.enterText(find.byType(TextFormField), '09:15');
+    await tester.tap(find.byType(TextFormField));
+    await tester.pumpAndSettle();
+    expect(find.byType(TimePickerDialog), findsOneWidget);
+    expect(
+      tester
+          .widget<TimePickerDialog>(find.byType(TimePickerDialog))
+          .initialTime,
+      const TimeOfDay(hour: 8, minute: 0),
+    );
+    final result = await captureAndCompare(
+      tester,
+      find.byType(MaterialApp),
+      'screenshots/reminder_settings_dialog/reminder_settings_dialog_when_time_picker_open.png',
+      'Reminder time picker',
+    );
+    expect(result['pass'], isTrue);
+    await tester.tap(find.byIcon(Icons.keyboard_outlined));
+    await tester.pumpAndSettle();
+    final fields = find.descendant(
+      of: find.byType(TimePickerDialog),
+      matching: find.byType(TextFormField),
+    );
+    await tester.enterText(fields.at(0), '21');
+    await tester.enterText(fields.at(1), '15');
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.text('21:15'), findsOneWidget);
+    await tester.tap(find.byType(TextFormField));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TimePickerDialog>(find.byType(TimePickerDialog))
+          .initialTime,
+      const TimeOfDay(hour: 21, minute: 15),
+    );
+    await tester.tap(find.text('Cancel').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
-    expect(saved!.hour, 9);
+    expect(saved!.hour, 21);
     expect(saved!.minute, 15);
   });
-  testWidgets('save should keep the dialog open when the time is invalid', (
-    tester,
-  ) async {
-    ReminderSettings? saved;
-    await open(tester, (value) => saved = value);
-    await tester.enterText(find.byType(TextFormField), '25:00');
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
-    expect(saved, isNull);
-    expect(find.text('Enter a time from 00:00 to 23:59'), findsOneWidget);
-    expect(find.byType(ReminderSettingsDialog), findsOneWidget);
-  });
+
+  testWidgets(
+    'cancel picker should keep the time when selection is cancelled',
+    (tester) async {
+      ReminderSettings? saved;
+      await open(tester, (value) => saved = value);
+      expect(tester.widget<TextField>(find.byType(TextField)).readOnly, isTrue);
+      await tester.tap(find.byType(TextFormField));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel').last);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '08:00',
+      );
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(saved!.hour, 8);
+      expect(saved!.minute, 0);
+    },
+  );
 }
