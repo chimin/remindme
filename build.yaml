@@ -1,0 +1,7 @@
+﻿targets:
+  $default:
+    builders:
+      bdd_widget_test|featureBuilder:
+        options:
+          customHeaders:
+            - "import 'package:flutter_test/flutter_test.dart';"

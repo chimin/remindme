@@ -101,6 +101,51 @@ flutter run -d <device> --dart-define-from-file=secrets/build.json
 - Analyze code: `flutter analyze`
 - Run tests: `flutter test --dart-define=GOOGLE_WEB_CLIENT_ID=test123`
 
+## Gherkin smoke test
+
+One Gherkin scenario checks that opening the app with simulated fresh-install
+state shows the **Continue with Google** login button. It runs as a Flutter
+widget test with isolated storage/authentication fakes; no device or Google
+account is needed.
+
+After resolving dependencies with `flutter pub get`, generate the test whenever
+the feature changes:
+
+```powershell
+dart run build_runner build
+```
+
+Run only this scenario:
+
+```powershell
+flutter test test/screens/login_screen_gherkin_test.dart --dart-define=GOOGLE_WEB_CLIENT_ID=test123
+```
+
+### Run from IntelliJ IDEA
+
+1. Open the project root in IntelliJ IDEA with the Flutter and Dart plugins
+   enabled and the Flutter SDK configured.
+2. In the IDE terminal, run `flutter pub get`, then
+   `dart run build_runner build` after changing the feature file.
+3. Open `test/screens/login_screen_gherkin_test.dart`. Click the gutter Run
+   icon beside `main()` to create a Flutter Test run configuration.
+4. Open **Run > Edit Configurations**, select that Flutter Test configuration,
+   and set **Additional run args** to
+   `--dart-define=GOOGLE_WEB_CLIENT_ID=test123`. Set its working directory to
+   the project root so fonts and screenshots resolve correctly. Click **Apply**.
+5. Run or debug that configuration. The Run tool window should show one passing
+   test. Open `screenshots/login_screen/login_screen_when_newly_installed.png`
+   in the Project tool window to inspect the captured screenshot.
+
+Run the generated Dart test rather than the `.feature` file. No emulator or
+connected device is required.
+
+The final step overwrites
+`screenshots/login_screen/login_screen_when_newly_installed.png` with a 360×640
+screenshot. Capture failures fail the test; the image is not a golden comparison.
+The generated test is committed and also runs with the normal `flutter test`
+suite. Edit the `.feature` and step files, not the generated test.
+
 ## Patrol E2E test (Android, manual only)
 
 This real-account flow signs in, grants **fresh Google Tasks permission**, creates
