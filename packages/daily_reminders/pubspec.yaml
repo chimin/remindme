@@ -1,0 +1,17 @@
+name: daily_reminders
+description: Native daily task summaries for Remind Me.
+version: 1.0.0
+publish_to: none
+environment:
+  sdk: ^3.11.1
+dependencies:
+  flutter:
+    sdk: flutter
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: chimin.remindme.reminders
+        pluginClass: DailyRemindersPlugin
+      ios:
+        pluginClass: DailyRemindersPlugin
