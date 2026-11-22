@@ -60,9 +60,9 @@ flutter analyze
 flutter test --dart-define=GOOGLE_WEB_CLIENT_ID=test123
 ```
 
-### Cucumber screen and widget tests
+### Cucumber feature tests
 
-Nine maintained features cover login, reminder settings, task editing, task home, widget appearance, color picking, task deletion confirmation, checked menu items, and widget task navigation. The login feature also includes the fresh-install smoke scenario. All feature files live directly in `features/`; each feature's steps and typed scenario context live directly in `features/steps/<feature_basename>/`. Shared runner support lives in `features/steps/scenario_runner.dart`.
+Eighteen maintained features cover screens, widgets, models, services, and task grouping. Nine screen and widget features cover login, reminder settings, task editing, task home, widget appearance, color picking, task deletion confirmation, checked menu items, and widget task navigation. Nine unit features preserve 95 cases for task metadata, Android and Flutter Google account providers, authentication, authorized HTTP requests, reminders, sync, task storage and recurrence, and task grouping. The login feature also includes the fresh-install smoke scenario. All feature files live directly in `features/`; each feature's steps and typed scenario context live directly in `features/steps/<feature_basename>/`. Shared runner support lives in `features/steps/scenario_runner.dart`.
 
 Edit the feature and its category steps, then generate and run the ordinary suite. This PowerShell command runs tests only if generation succeeds:
 
@@ -80,7 +80,7 @@ flutter test test/features/login_screen_test.dart --dart-define=GOOGLE_WEB_CLIEN
 
 In IntelliJ, generate first, then run `main()` in the desired generated test file. Set **Additional run args** to `--dart-define=GOOGLE_WEB_CLIENT_ID=test123` and the working directory to the repository root. Rerun generation after feature edits before using an IDE test action.
 
-UI scenarios use the widget runner; color parsing and formatting scenarios override it with the ordinary unit runner. Scenario continuations retain typed local values across Given/When/Then steps, and the Background initializes isolated state and failure cleanup. Font setup and platform mocks stay with their category.
+UI scenarios use `widgetScenario`; model, service, task grouping, and color parsing and formatting scenarios use `unitScenario`. Scenario names follow `{action} should {do what} when {what happen}`. Scenario continuations retain typed local values across Given/When/Then steps, and the Background initializes isolated state and failure cleanup. Font setup and platform mocks stay with their category.
 
 Screenshot paths, references, thresholds, and failed-image behavior remain unchanged. The fresh-install screenshot compares `features/screenshots/login_screen/login_screen_when_newly_installed.png` without replacing it.
 

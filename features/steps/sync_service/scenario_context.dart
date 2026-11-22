@@ -1,3 +1,4 @@
+import '../scenario_runner.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -81,11 +82,12 @@ class _WorkerRepository extends FakeRepo {
   }
 }
 
-void main() {
+ScenarioCases defineScenarios() {
+  final scenarios = <String, ScenarioFactory>{};
+
   TestWidgetsFlutterBinding.ensureInitialized();
-  test(
-    'background sync should defer without creating a repository when foreground storage is owned',
-    () async {
+  scenarios['0'] = (state) async {
+    state.next = () async {
       final foreground = TaskStorageLease();
       await foreground.acquire();
       var created = false;
@@ -103,76 +105,92 @@ void main() {
       } finally {
         foreground.release();
       }
-    },
-  );
-  test(
-    'background sync should release storage when no account is linked',
-    () async {
-      late _WorkerRepository repository;
-      expect(
-        await runBackgroundSync(
-          repositoryFactory: (lease) =>
-              repository = _WorkerRepository(lease)..linked = false,
-        ),
-        isTrue,
-      );
-      expect(repository.closed, isTrue);
-      expect(repository.pulled, isFalse);
-      final lease = TaskStorageLease();
-      expect(await lease.acquire(wait: false), isTrue);
-      lease.release();
-    },
-  );
-  test(
-    'background sync should avoid retrying consent when interaction is required',
-    () async {
-      late _WorkerRepository repository;
-      expect(
-        await runBackgroundSync(
-          repositoryFactory: (lease) => repository = _WorkerRepository(lease)
-            ..failure = const AccountException(
-              AccountFailure.interactionRequired,
-              'Reconnect',
-            ),
-        ),
-        isTrue,
-      );
-      expect(repository.closed, isTrue);
-    },
-  );
 
-  test(
-    'sync should share one push and pull when refresh requests overlap',
-    () async {
+      state.next = () async {};
+    };
+  };
+  scenarios['1'] = (state) async {
+    state.next = () async {
+      late _WorkerRepository repository;
+      state.next = () async {
+        expect(
+          await runBackgroundSync(
+            repositoryFactory: (lease) =>
+                repository = _WorkerRepository(lease)..linked = false,
+          ),
+          isTrue,
+        );
+        expect(repository.closed, isTrue);
+        expect(repository.pulled, isFalse);
+        state.next = () async {
+          final lease = TaskStorageLease();
+          state.next = () async {
+            expect(await lease.acquire(wait: false), isTrue);
+            lease.release();
+          };
+        };
+      };
+    };
+  };
+  scenarios['2'] = (state) async {
+    state.next = () async {
+      late _WorkerRepository repository;
+      state.next = () async {
+        expect(
+          await runBackgroundSync(
+            repositoryFactory: (lease) => repository = _WorkerRepository(lease)
+              ..failure = const AccountException(
+                AccountFailure.interactionRequired,
+                'Reconnect',
+              ),
+          ),
+          isTrue,
+        );
+        expect(repository.closed, isTrue);
+      };
+    };
+  };
+
+  scenarios['3'] = (state) async {
+    state.next = () async {
       final fake = FakeRepo()..pendingPull = Completer<void>();
       final service = SyncService(fake);
       final first = service.sync();
       final second = service.sync();
       await Future<void>.delayed(Duration.zero);
-      expect(fake.pulls, 1);
-      fake.pendingPull!.complete();
-      await Future.wait([first, second]);
+      state.next = () async {
+        expect(fake.pulls, 1);
+        state.next = () async {
+          fake.pendingPull!.complete();
+          await Future.wait([first, second]);
+          await service.sync();
+          state.next = () async {
+            expect(fake.pulls, 2);
+            fake.dispose();
+          };
+        };
+      };
+    };
+  };
+
+  scenarios['4'] = (state) async {
+    state.next = () async {
+      final fake = FakeRepo()..pendingPull = Completer<void>();
+      final service = SyncService(fake);
+      final result = expectLater(service.sync(), throwsStateError);
+      fake.pendingPull!.completeError(StateError('offline'));
+      await result;
+      fake.pendingPull = null;
       await service.sync();
-      expect(fake.pulls, 2);
-      fake.dispose();
-    },
-  );
+      state.next = () async {
+        expect(fake.pulls, 2);
+        fake.dispose();
+      };
+    };
+  };
 
-  test('sync should allow retry when a shared refresh fails', () async {
-    final fake = FakeRepo()..pendingPull = Completer<void>();
-    final service = SyncService(fake);
-    final result = expectLater(service.sync(), throwsStateError);
-    fake.pendingPull!.completeError(StateError('offline'));
-    await result;
-    fake.pendingPull = null;
-    await service.sync();
-    expect(fake.pulls, 2);
-    fake.dispose();
-  });
-
-  test(
-    'sync should push dirty local changes to remote then pull remote when a tasklist is selected',
-    () async {
+  scenarios['5'] = (state) async {
+    state.next = () async {
       final fake = FakeRepo()
         ..entries.addAll([
           CachedTask(
@@ -205,42 +223,51 @@ void main() {
 
       final service = SyncService(fake);
       await service.sync();
+      state.next = () async {
+        expect(fake.pushedCreates, contains('loc-1'));
+        expect(fake.pushedUpdates, contains('srv-1'));
+        expect(fake.pushedDeletes, contains('srv-2'));
+        expect(fake.pulled, isTrue);
+      };
+    };
+  };
 
-      expect(fake.pushedCreates, contains('loc-1'));
-      expect(fake.pushedUpdates, contains('srv-1'));
-      expect(fake.pushedDeletes, contains('srv-2'));
-      expect(fake.pulled, isTrue);
-    },
-  );
+  scenarios['6'] = (state) async {
+    state.next = () async {
+      final fake = FakeRepo()
+        ..entries.add(
+          CachedTask(
+            id: 'srv-1',
+            tasklistId: 'list-1',
+            title: 'Clean',
+            dirty: false,
+          ),
+        );
 
-  test('sync should skip entries that are not dirty', () async {
-    final fake = FakeRepo()
-      ..entries.add(
-        CachedTask(
-          id: 'srv-1',
-          tasklistId: 'list-1',
-          title: 'Clean',
-          dirty: false,
-        ),
-      );
+      final service = SyncService(fake);
+      await service.sync();
+      state.next = () async {
+        expect(fake.pushedCreates, isEmpty);
+        expect(fake.pushedUpdates, isEmpty);
+        expect(fake.pushedDeletes, isEmpty);
+        expect(fake.pulled, isTrue);
+      };
+    };
+  };
 
-    final service = SyncService(fake);
-    await service.sync();
+  scenarios['7'] = (state) async {
+    state.next = () async {
+      final fake = FakeRepo()..selectedId = null;
+      final service = SyncService(fake);
+      await service.sync();
+      state.next = () async {
+        expect(fake.pulled, isFalse);
+        expect(fake.pushedCreates, isEmpty);
+        expect(fake.pushedUpdates, isEmpty);
+        expect(fake.pushedDeletes, isEmpty);
+      };
+    };
+  };
 
-    expect(fake.pushedCreates, isEmpty);
-    expect(fake.pushedUpdates, isEmpty);
-    expect(fake.pushedDeletes, isEmpty);
-    expect(fake.pulled, isTrue);
-  });
-
-  test('sync should do nothing when no tasklist is selected', () async {
-    final fake = FakeRepo()..selectedId = null;
-    final service = SyncService(fake);
-    await service.sync();
-
-    expect(fake.pulled, isFalse);
-    expect(fake.pushedCreates, isEmpty);
-    expect(fake.pushedUpdates, isEmpty);
-    expect(fake.pushedDeletes, isEmpty);
-  });
+  return scenarios;
 }

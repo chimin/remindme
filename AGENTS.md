@@ -15,3 +15,4 @@
 15. Put feature step files directly in `features/steps/<category>/`; do not create subdirectories inside a category.
 16. For screen and widget features, use the feature filename without `.feature` as the step category. Keep the existing Patrol category `app_journey`.
 17. Put shared Cucumber runner support directly in `features/steps/`; keep category-specific support directly in its category directory.
+18. In feature files, group scenarios with similar actions under descriptive `Rule` blocks when this improves organization.
