@@ -34,8 +34,11 @@ abstract class WidgetScreenshotTask : DefaultTask() {
         if (!skipBootWait) {
             waitUntilBooted(adb, serial)
         }
-        runTests(serial, adb)
-        pullScreenshots(adb, serial)
+        try {
+            runTests(serial, adb)
+        } finally {
+            pullScreenshots(adb, serial)
+        }
     }
 
     private fun sdkRoots(): List<String> {
@@ -163,17 +166,24 @@ abstract class WidgetScreenshotTask : DefaultTask() {
         }
         // Run the test APK directly via am instrument so the app stays installed
         // (connectedAndroidTest uninstalls the app afterwards, which breaks pull).
-        val instrumentationOutput = ByteArrayOutputStream()
-        val result = project.exec {
-            standardOutput = instrumentationOutput
-            commandLine(adb, "-s", serial, "shell",
-                "am instrument -w -e class chimin.remindme.MainActivityScreenshotTest chimin.remindme.test/androidx.test.runner.AndroidJUnitRunner")
-            isIgnoreExitValue = true
-        }
-        val report = instrumentationOutput.toString()
-        println(report)
-        if (result.exitValue != 0 || !Regex("""OK \(\d+ tests?\)""").containsMatchIn(report)) {
-            error("Screenshot instrumentation failed. See the test report above.")
+        // Keep launcher fixtures and collection backends in separate instrumentation processes.
+        for (tags in listOf(
+            "@home_screen_widget",
+            "@main_activity_screenshot and not @legacy_widget",
+            "@main_activity_screenshot and @legacy_widget",
+        )) {
+            val instrumentationOutput = ByteArrayOutputStream()
+            val result = project.exec {
+                standardOutput = instrumentationOutput
+                commandLine(adb, "-s", serial, "shell",
+                    "am instrument -w -e optionsAnnotationPackage chimin.remindme.support -e tags '$tags' chimin.remindme.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner")
+                isIgnoreExitValue = true
+            }
+            val report = instrumentationOutput.toString()
+            println(report)
+            if (result.exitValue != 0 || !Regex("""OK \(\d+ tests?\)""").containsMatchIn(report)) {
+                error("Screenshot instrumentation failed. See the test report above.")
+            }
         }
     }
 
@@ -181,7 +191,7 @@ abstract class WidgetScreenshotTask : DefaultTask() {
         val testDir = File(project.projectDir, "screenshots")
         testDir.mkdirs()
         // Screenshots are written to app-specific external storage by
-        // MainActivityScreenshotTest. adb pull as the shell user can read this.
+        // the native screenshot steps. adb pull as the shell user can read this.
         project.exec {
             commandLine(adb, "-s", serial, "pull",
                 "/sdcard/Android/data/chimin.remindme/files/test_output/golden/.", testDir.absolutePath)

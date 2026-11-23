@@ -6,7 +6,7 @@ plugins {
 }
 
 // Patrol passes this flag explicitly to both APK build tasks.
-// Regular builds and the screenshot fixture retain AndroidJUnitRunner.
+// Regular builds and the screenshot fixture use the native Cucumber runner.
 val patrolE2e = providers.gradleProperty("patrol-enabled").orNull == "true"
 
 android {
@@ -35,7 +35,10 @@ android {
         versionName = flutter.versionName
         testInstrumentationRunner = if (patrolE2e)
             "pl.leancode.patrol.PatrolJUnitRunner"
-        else "androidx.test.runner.AndroidJUnitRunner"
+        else "io.cucumber.android.runner.CucumberAndroidJUnitRunner"
+        if (!patrolE2e) {
+            testInstrumentationRunnerArguments["optionsAnnotationPackage"] = "chimin.remindme.support"
+        }
     }
 
     if (patrolE2e) {
@@ -72,6 +75,7 @@ dependencies {
     // instrumentation dependencies for AGP's consistent version resolution.
     debugImplementation("androidx.test.ext:junit:1.2.1")
     debugImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation("io.cucumber:cucumber-android:7.18.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.2.0")

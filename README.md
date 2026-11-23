@@ -62,7 +62,7 @@ flutter test --dart-define=GOOGLE_WEB_CLIENT_ID=test123
 
 ### Cucumber feature tests
 
-Eighteen maintained features cover screens, widgets, models, services, and task grouping. Nine screen and widget features cover login, reminder settings, task editing, task home, widget appearance, color picking, task deletion confirmation, checked menu items, and widget task navigation. Nine unit features preserve 95 cases for task metadata, Android and Flutter Google account providers, authentication, authorized HTTP requests, reminders, sync, task storage and recurrence, and task grouping. The login feature also includes the fresh-install smoke scenario. All feature files live directly in `features/`; each feature's steps and typed scenario context live directly in `features/steps/<feature_basename>/`. Shared runner support lives in `features/steps/scenario_runner.dart`.
+Eighteen maintained features cover screens, widgets, models, services, and task grouping. Nine screen and widget features cover login, reminder settings, task editing, task home, widget appearance, color picking, task deletion confirmation, checked menu items, and widget task navigation. Nine unit features preserve 95 cases for task metadata, Android and Flutter Google account providers, authentication, authorized HTTP requests, reminders, sync, task storage and recurrence, and task grouping. The login feature also includes the fresh-install smoke scenario. All Flutter and Patrol feature files live directly in `features/`; each feature's steps and typed scenario context live directly in `features/steps/<feature_basename>/`. Shared runner support lives in `features/steps/scenario_runner.dart`.
 
 Edit the feature and its category steps, then generate and run the ordinary suite. This PowerShell command runs tests only if generation succeeds:
 
@@ -140,6 +140,46 @@ Previous run captures, failures, video, and logs are cleared. Copy any evidence 
 
 Failures return a nonzero exit code. After testing, rebuild/install the normal app with the command in “Run the app.”
 
+## Native Android Cucumber tests
+
+Four features cover 28 native scenarios. Launcher widget visuals are consolidated into four `home_screen_widget` scenarios: pinning with four dated tasks, an empty state, updated appearance, and all date categories. Focused provider assertions and task-editor navigation remain separate. Feature assets live directly in `android/app/src/androidTest/assets/features/`. Kotlin steps and scenario contexts live in `android/app/src/androidTest/kotlin/chimin/remindme/steps/<feature_basename>/`; shared runner configuration and SDK hooks live in `support/`. Each steps instance owns a fresh context per scenario. Dart feature generation and Patrol's `app_journey` remain separate.
+
+Use an unlocked English API 31+ emulator with a launcher supporting widget pinning (API 33+ for the denied-permission case). Cucumber Android requires API 26+. Build the dedicated screenshot fixture for the home-widget and main-activity scenarios, which must never run against a signed-in account:
+
+```powershell
+.\android\gradlew.bat -p android :app:assembleDebug :app:assembleDebugAndroidTest '-Ptarget=lib/main_screenshot.dart'
+adb -s emulator-5554 install -r build/app/outputs/apk/debug/app-debug.apk
+adb -s emulator-5554 install -r build/app/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb -s emulator-5554 shell am instrument -w -e optionsAnnotationPackage chimin.remindme.support -e dryRun true chimin.remindme.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner
+adb -s emulator-5554 shell "am instrument -w -e optionsAnnotationPackage chimin.remindme.support -e tags 'not @permission_denied and not @arm_alarm and not @legacy_widget and not @home_screen_widget' chimin.remindme.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner"
+```
+
+Use your emulator serial. The dry run must discover all 28 scenarios without undefined steps. Run launcher-widget captures and legacy navigation in separate instrumentation processes to isolate launcher fixtures and collection backends on the test emulator.
+
+```powershell
+adb -s emulator-5554 shell am instrument -w -e optionsAnnotationPackage chimin.remindme.support -e tags '@home_screen_widget' chimin.remindme.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner
+adb -s emulator-5554 shell am instrument -w -e optionsAnnotationPackage chimin.remindme.support -e tags '@legacy_widget' chimin.remindme.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner
+```
+
+Select one feature with `-e tags @daily_reminders`, `@task_widget_provider`, `@main_activity_screenshot`, or `@home_screen_widget`. For the main-activity feature, exclude `@legacy_widget` in the first invocation and run that tag separately. API-specific scenarios report prerequisite skips on older devices.
+
+Run the permission-denied scenario alone after revoking permission; revoking it during instrumentation kills the process:
+
+```powershell
+adb -s emulator-5554 shell pm revoke chimin.remindme android.permission.POST_NOTIFICATIONS
+adb -s emulator-5554 shell am instrument -w -e optionsAnnotationPackage chimin.remindme.support -e tags '@permission_denied' chimin.remindme.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner
+```
+
+Alarm arming remains opt-in: select `-e tags '@arm_alarm' -e armDailyReminder true`. It retains a reminder alarm fifteen seconds ahead for manual closed-app observation and deliberately makes no delivery assertion. This argument also preserves the existing reminder cleanup opt-out. Without it the scenario is skipped.
+
+Native captures use component subdirectories in app-specific external storage. Pull all captures, including launcher images, into `android/screenshots/<component>/` with:
+
+```powershell
+adb -s emulator-5554 pull /sdcard/Android/data/chimin.remindme/files/test_output/golden/. android/screenshots/
+```
+
+Patrol still selects `pl.leancode.patrol.PatrolJUnitRunner` through `-Ppatrol-enabled=true`; its Java entry point and Dart journey are unchanged.
+
 ## Android screenshots
 
 Use an unlocked English emulator with a launcher supporting widget pinning. Keep the widget on the current home page.
@@ -150,11 +190,11 @@ Use an unlocked English emulator with a launcher supporting widget pinning. Keep
 
 The default AVD is `RemindMe_Test`. Append `-Pavd=YourAvd` to change it or `-PskipBootWait=true` if already booted.
 
-The task captures the task list, add-task screen, and home-screen widget using fixture data without Google sign-in. Files are saved to `android/screenshots/<page/component>/`. Rebuild/install the normal app afterwards.
+The task selects `@home_screen_widget` and `@main_activity_screenshot` with the Cucumber runner in separate invocations for launcher widgets, app screens/current navigation, and legacy navigation, captures the task list, add-task screen, and all four launcher widget states, and checks cold/warm navigation through current and legacy widgets using fixture data without Google sign-in. Files are saved to `android/screenshots/<component>/`. Rebuild/install the normal app afterwards.
 
 Use `<page/component>_when_<what_happen>.png` for Flutter and Android screenshots. Store Flutter images under `features/screenshots/<page/component>/`.
 
-Failed Flutter and Patrol comparisons save the actual image beside its reference as `<reference_name>_FAILED.png`. Include these images in Git for review. Passing comparisons and golden updates remove stale failure images.
+Failed native launcher-widget and main-activity scenarios save a diagnostic capture beside the corresponding screenshot as `<reference_name>_FAILED.png`. Failed Flutter and Patrol comparisons save the actual image beside its reference as `<reference_name>_FAILED.png`. Include these images in Git for review. Passing comparisons and golden updates remove stale failure images.
 
 ## Update branding assets
 
