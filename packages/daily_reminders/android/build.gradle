@@ -1,11 +1,6 @@
 group = 'chimin.remindme.reminders'
 version = '1.0'
-buildscript {
-    repositories { google(); mavenCentral() }
-    dependencies { classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.20' }
-}
 apply plugin: 'com.android.library'
-apply plugin: 'kotlin-android'
 android {
     namespace 'chimin.remindme.reminders'
     compileSdk 36
@@ -14,6 +9,10 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = '17' }
+}
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
 }
 repositories { google(); mavenCentral() }

@@ -1,8 +1,10 @@
 import org.gradle.api.DefaultTask
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.TaskAction
+import org.gradle.process.ExecOperations
 import java.io.ByteArrayOutputStream
 import java.io.File
+import javax.inject.Inject
 
 /**
  * Orchestrates the widget screenshot workflow entirely within Gradle:
@@ -16,6 +18,9 @@ import java.io.File
  *   7. Pull screenshots from app-specific external storage into `android/screenshots`.
  */
 abstract class WidgetScreenshotTask : DefaultTask() {
+
+    @get:Inject
+    abstract val execOperations: ExecOperations
 
     @get:Input
     var skipBootWait: Boolean = false
@@ -70,7 +75,7 @@ abstract class WidgetScreenshotTask : DefaultTask() {
     private fun findOnPath(name: String): String? {
         val cmd = if (isWindows()) "where" else "which"
         val out = ByteArrayOutputStream()
-        val result = project.exec {
+        val result = execOperations.exec {
             commandLine(cmd, name)
             standardOutput = out
             errorOutput = ByteArrayOutputStream()
@@ -107,7 +112,7 @@ abstract class WidgetScreenshotTask : DefaultTask() {
 
     private fun listDevices(adb: String): List<String> {
         val out = ByteArrayOutputStream()
-        project.exec {
+        execOperations.exec {
             commandLine(adb, "devices")
             standardOutput = out
             errorOutput = ByteArrayOutputStream()
@@ -119,7 +124,7 @@ abstract class WidgetScreenshotTask : DefaultTask() {
     private fun waitUntilBooted(adb: String, serial: String) {
         repeat(180) {
             val out = ByteArrayOutputStream()
-            val result = project.exec {
+            val result = execOperations.exec {
                 commandLine(adb, "-s", serial, "shell", "getprop", "sys.boot_completed")
                 standardOutput = out
                 errorOutput = ByteArrayOutputStream()
@@ -138,14 +143,14 @@ abstract class WidgetScreenshotTask : DefaultTask() {
      * (INSTALL_FAILED_USER_RESTRICTED).
      */
     private fun installApks(adb: String, serial: String) {
-        val appDir = File(project.rootProject.buildDir, "app/outputs/apk")
+        val appDir = project.rootProject.layout.buildDirectory.dir("app/outputs/apk").get().asFile
         val appApk = appDir.resolve("debug/app-debug.apk")
         val testApk = appDir.resolve("androidTest/debug/app-debug-androidTest.apk")
         for (apk in listOf(appApk, testApk)) {
             if (!apk.exists()) {
                 error("APK not found: ${apk.absolutePath}. Build it first (assembleDebug / assembleDebugAndroidTest).")
             }
-            val result = project.exec {
+            val result = execOperations.exec {
                 commandLine(adb, "-s", serial, "install", "-r", apk.absolutePath)
                 isIgnoreExitValue = true
             }
@@ -160,7 +165,7 @@ abstract class WidgetScreenshotTask : DefaultTask() {
         val testDir = File(project.projectDir, "screenshots")
         testDir.mkdirs()
         // Clear stale screenshots from external storage before running.
-        project.exec {
+        execOperations.exec {
             commandLine(adb, "-s", serial, "shell", "rm -rf /sdcard/Android/data/chimin.remindme/files/test_output")
             isIgnoreExitValue = true
         }
@@ -173,7 +178,7 @@ abstract class WidgetScreenshotTask : DefaultTask() {
             "@main_activity_screenshot and @legacy_widget",
         )) {
             val instrumentationOutput = ByteArrayOutputStream()
-            val result = project.exec {
+            val result = execOperations.exec {
                 standardOutput = instrumentationOutput
                 commandLine(adb, "-s", serial, "shell",
                     "am instrument -w -e optionsAnnotationPackage chimin.remindme.support -e tags '$tags' chimin.remindme.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner")
@@ -192,7 +197,7 @@ abstract class WidgetScreenshotTask : DefaultTask() {
         testDir.mkdirs()
         // Screenshots are written to app-specific external storage by
         // the native screenshot steps. adb pull as the shell user can read this.
-        project.exec {
+        execOperations.exec {
             commandLine(adb, "-s", serial, "pull",
                 "/sdcard/Android/data/chimin.remindme/files/test_output/golden/.", testDir.absolutePath)
             isIgnoreExitValue = true

@@ -6,7 +6,7 @@ Run commands in PowerShell from the repository root unless stated otherwise.
 
 ## Prerequisites
 
-- [Flutter](https://docs.flutter.dev/get-started/install) 3.41.4 (Dart ^3.11.1).
+- [Flutter](https://docs.flutter.dev/get-started/install) 3.47.9 (Dart ^3.13.7).
 - Android Studio for Android development, or Xcode on macOS for iOS.
 - A [Google Cloud Console](https://console.cloud.google.com/) project.
 
