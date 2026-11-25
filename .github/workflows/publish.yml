@@ -1,0 +1,62 @@
+name: Publish to Google Play
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: google-play-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare release notes
+        shell: python
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          import json
+          import os
+          from pathlib import Path
+
+          if not os.environ['GOOGLE_PLAY_SERVICE_ACCOUNT_JSON'].strip():
+              raise SystemExit('Required secret GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is missing.')
+          event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text(encoding='utf-8'))
+          notes = event['release']['body'] or ''
+          if not notes.strip():
+              raise SystemExit('Release notes must not be blank.')
+          if len(notes) > 500:
+              raise SystemExit('Release notes exceed Google Play\u2019s 500 Unicode character limit. Shorten the release body and retry.')
+          directory = Path(os.environ['RUNNER_TEMP']) / 'play-release-notes'
+          directory.mkdir(parents=True, exist_ok=True)
+          (directory / 'whatsnew-en-US').write_bytes(notes.encode('utf-8'))
+
+      - name: Download release AAB
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          gh release download "$TAG_NAME" \
+            --pattern app-release.aab --dir "$RUNNER_TEMP/release-assets"
+          if [[ ! -s "$RUNNER_TEMP/release-assets/app-release.aab" ]]; then
+            echo 'The release must contain a nonempty app-release.aab asset.' >&2
+            exit 1
+          fi
+
+      - name: Publish to Google Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: chimin.remindme
+          releaseFiles: ${{ runner.temp }}/release-assets/app-release.aab
+          releaseName: ${{ github.event.release.tag_name }}
+          tracks: alpha
+          whatsNewDirectory: ${{ runner.temp }}/play-release-notes
+          status: completed

@@ -31,6 +31,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
       KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -99,7 +101,6 @@ jobs:
         shell: bash
         env:
           BUILD_KEYSTORE_BASE64: ${{ secrets.BUILD_KEYSTORE_BASE64 }}
-          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           for name in GOOGLE_WEB_CLIENT_ID BUILD_KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [[ -z "${!name//[[:space:]]/}" ]]; then
@@ -107,10 +108,6 @@ jobs:
               exit 1
             fi
           done
-          if [[ "$GITHUB_EVENT_NAME" == push && -z "${GOOGLE_PLAY_SERVICE_ACCOUNT_JSON//[[:space:]]/}" ]]; then
-            echo 'Required secret GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is missing.' >&2
-            exit 1
-          fi
           mkdir -p secrets
           jq -n --arg client_id "$GOOGLE_WEB_CLIENT_ID" '{GOOGLE_WEB_CLIENT_ID: $client_id}' > secrets/build.json
           printf '%s' "$BUILD_KEYSTORE_BASE64" | base64 --decode > secrets/build.keystore
@@ -139,7 +136,7 @@ jobs:
           path: build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
 
-      - name: Generate Google Play release notes
+      - name: Generate release notes
         if: ${{ github.event_name == 'push' }}
         shell: bash
         env:
@@ -167,26 +164,24 @@ jobs:
             printf '## Release notes for %s\n\n' "$TAG_NAME"
             printf '%s\n' "$notes"
           } >> "$GITHUB_STEP_SUMMARY"
-          # Google Play limits release notes to 500 characters per language.
-          if (( ${#notes} > 500 )); then
-            notes='Many improvements'
-          fi
-          directory="$RUNNER_TEMP/play-release-notes"
-          mkdir -p "$directory"
-          printf '%s' "$notes" > "$directory/whatsnew-en-US"
+          printf '%s' "$notes" > "$RUNNER_TEMP/release-notes.txt"
           printf 'Release notes from %s:\n%s\n' "$range" "$notes"
 
-      - name: Publish to Google Play
+      - name: Create draft GitHub release
         if: ${{ github.event_name == 'push' }}
-        uses: r0adkll/upload-google-play@v1
-        with:
-          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: chimin.remindme
-          releaseFiles: build/app/outputs/bundle/release/app-release.aab
-          releaseName: ${{ github.ref_name }}
-          track: internal
-          whatsNewDirectory: ${{ runner.temp }}/play-release-notes
-          status: completed
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG_NAME" > /dev/null 2>&1; then
+            echo "A release already exists for $TAG_NAME; leaving it unchanged." >&2
+            exit 1
+          fi
+          gh release create "$TAG_NAME" \
+            build/app/outputs/bundle/release/app-release.aab \
+            --draft --verify-tag --title "$TAG_NAME" \
+            --notes-file "$RUNNER_TEMP/release-notes.txt"
 
       - name: Clean up signing files
         if: ${{ always() }}
