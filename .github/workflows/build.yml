@@ -178,10 +178,12 @@ jobs:
             echo "A release already exists for $TAG_NAME; leaving it unchanged." >&2
             exit 1
           fi
-          gh release create "$TAG_NAME" \
+          release_url=$(gh release create "$TAG_NAME" \
             build/app/outputs/bundle/release/app-release.aab \
             --draft --verify-tag --title "$TAG_NAME" \
-            --notes-file "$RUNNER_TEMP/release-notes.txt"
+            --notes-file "$RUNNER_TEMP/release-notes.txt")
+          printf '%s\n' "$release_url"
+          printf '\n[Open draft release](%s)\n' "$release_url" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Clean up signing files
         if: ${{ always() }}
