@@ -227,6 +227,7 @@ Add these under **Settings → Secrets and variables → Actions**:
 | `KEYSTORE_PASSWORD` | Keystore password. |
 | `KEY_ALIAS` | Signing key alias. |
 | `KEY_PASSWORD` | Signing key password. |
+| `OPENROUTER_API_KEY` | OpenRouter API key for automatic release-note editing with `openrouter/free`. If missing or processing fails, the draft keeps raw commit notes and the job summary warns that they were not processed by an LLM. |
 | `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | Service-account JSON key with permission to release `chimin.remindme` to testing tracks. Enable the Google Play Android Developer API for its project. Required for tag releases. |
 
 Encode the keystore in PowerShell:
@@ -253,4 +254,4 @@ git tag v1.2.3
 git push origin v1.2.3
 ```
 
-The workflow builds a signed AAB, submits it to Google Play internal testing, and saves it as a workflow artifact. Release notes come from commits. Check the workflow result and Play Console for release status.
+The workflow builds a signed AAB, submits it to Google Play internal testing, and saves it as a workflow artifact. Release notes come from commits and are edited with OpenRouter's free model router into professional, concise Markdown bullets covering user-facing features, fixes, and improvements. Technical changes are omitted and processed notes are limited to 500 Unicode characters for Google Play. After up to three attempts, failed processing falls back to the original commit notes with a warning in the job summary. Review the draft before publishing; raw fallback notes may need manual shortening to satisfy the existing Google Play limit. Check the workflow result and Play Console for release status.
