@@ -148,6 +148,24 @@ class ScenarioSteps {
         assertEquals(listOf("Overdue", "Today"), summary.second)
     }
 
+    @Given("a reminder snapshot contains two tasks due on November {int}")
+    fun aReminderSnapshotContainsTwoTasksDueOnNovember(day: Int): Unit = with(state) {
+        snapshot = JSONObject("""{"tasks":[
+          {"title":"First task","year":2026,"month":11,"day":$day},
+          {"title":"Second task","year":2026,"month":11,"day":$day}
+        ]}""")
+    }
+
+    @Then("the summary heading is {string}")
+    fun theSummaryHeadingIs(heading: String): Unit = with(state) {
+        assertEquals(heading, summary.first)
+    }
+
+    @Then("the summary contains both task titles")
+    fun theSummaryContainsBothTaskTitles(): Unit = with(state) {
+        assertEquals(listOf("First task", "Second task"), summary.second)
+    }
+
     @Given("a reminder snapshot has no tasks")
     fun aReminderSnapshotHasNoTasks(): Unit = with(state) {
         snapshot = JSONObject("""{"tasks":[]}""")
@@ -160,6 +178,7 @@ class ScenarioSteps {
 
     @Then("the summary has no task titles")
     fun theSummaryHasNoTaskTitles(): Unit = with(state) {
+        assertEquals("", summary.first)
         assertTrue(summary.second.isEmpty())
     }
 
@@ -167,6 +186,36 @@ class ScenarioSteps {
     fun dueRemindersHaveNotificationPermission(): Unit = with(state) {
         grantPermission()
         DailyReminders.replace(context, fixture())
+    }
+
+    @Given("two reminder tasks are due {int} days ago with notification permission")
+    fun twoReminderTasksAreDueDaysAgoWithNotificationPermission(daysAgo: Int): Unit = with(state) {
+        grantPermission()
+        val due = Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, -daysAgo) }
+        val reminder = fixture()
+        val tasks = reminder.getJSONArray("tasks")
+        for (index in 0 until tasks.length()) {
+            tasks.getJSONObject(index)
+                .put("year", due.get(Calendar.YEAR))
+                .put("month", due.get(Calendar.MONTH) + 1)
+                .put("day", due.get(Calendar.DAY_OF_MONTH))
+        }
+        DailyReminders.replace(context, reminder)
+        device.pressHome()
+        device.waitForIdle()
+    }
+
+    @Then("the reminder titled {string} is visible and captured as {string}")
+    fun captureReminderWithTitle(heading: String, condition: String): Unit = with(state) {
+        captureReminder(condition) {
+            waitForNotification(true)
+            val posted = manager.activeNotifications.single { it.id == 804 }.notification
+            assertEquals(heading, posted.extras.getString("android.title"))
+            assertTrue(device.wait(Until.hasObject(By.text(heading)), 10000))
+            device.findObject(By.desc("Collapse"))?.click()
+            device.waitForIdle()
+            assertTrue(device.hasObject(By.text(heading)))
+        }
     }
 
     @When("the daily reminder broadcast is received")
@@ -185,7 +234,9 @@ class ScenarioSteps {
 
     @When("the reminder notification shade is opened")
     fun openNotificationShade(): Unit = with(state) {
-        device.openNotification()
+        waitForNotification(true)
+        device.waitForIdle()
+        assertTrue(device.openNotification())
     }
 
     @Then("the app symbol is visible in the status bar and captured")

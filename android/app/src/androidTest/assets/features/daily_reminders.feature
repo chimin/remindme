@@ -35,6 +35,17 @@ Feature: Daily reminders
       When the mixed snapshot is summarized for November twenty second
       Then only overdue and today tasks appear in the summary
 
+    Scenario Outline: summary should omit zero counts when only one category has tasks
+      Given a reminder snapshot contains two tasks due on November <day>
+      When the mixed snapshot is summarized for November twenty second
+      Then the summary heading is "<heading>"
+      And the summary contains both task titles
+
+      Examples:
+        | day | heading   |
+        | 21  | 2 overdue |
+        | 22  | 2 today   |
+
     Scenario: summary should return empty when no tasks qualify
       Given a reminder snapshot has no tasks
       When the empty snapshot is summarized
@@ -56,6 +67,17 @@ Feature: Daily reminders
 
       When the reminder summary notification is tapped
       Then the reminder opens the app home
+
+    Scenario Outline: receive should capture only positive counts when one task category is populated
+      Given two reminder tasks are due <days_ago> days ago with notification permission
+      When the daily reminder broadcast is received
+      And the reminder notification shade is opened
+      Then the reminder titled "<heading>" is visible and captured as "<condition>"
+
+      Examples:
+        | days_ago | heading   | condition          |
+        | 1        | 2 overdue | only_overdue_tasks |
+        | 0        | 2 today   | only_today_tasks   |
 
     Scenario: replace should clear snapshot and notification when signed out
       Given a due reminder notification is posted

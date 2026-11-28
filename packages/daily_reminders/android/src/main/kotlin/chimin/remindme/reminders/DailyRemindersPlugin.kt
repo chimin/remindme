@@ -163,7 +163,11 @@ object DailyReminders {
             if (due == day) dueToday++ else overdue++
             titles.add(task.optString("title", "(Untitled)"))
         }
-        return Pair("$overdue overdue · $dueToday today", titles)
+        val counts = listOfNotNull(
+            if (overdue > 0) "$overdue overdue" else null,
+            if (dueToday > 0) "$dueToday today" else null,
+        ).joinToString(" · ")
+        return Pair(counts, titles)
     }
 
     private fun post(context: Context, state: JSONObject, onlyAlertOnce: Boolean = false) {
