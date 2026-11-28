@@ -46,9 +46,13 @@ Feature: Daily reminders
       Given due reminders have notification permission
       When the daily reminder broadcast is received
       Then an expandable reminder summary contains the due tasks
+      And the app symbol is visible in the status bar and captured
 
       When the reminder notification shade is opened
       Then the reminder notification is visible and captured
+
+      When the reminder notification is expanded
+      Then the expanded reminder notification is visible and captured
 
       When the reminder summary notification is tapped
       Then the reminder opens the app home

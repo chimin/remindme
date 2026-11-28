@@ -178,6 +178,7 @@ class ScenarioSteps {
     fun checkExpandableSummary(): Unit = with(state) {
         waitForNotification(true)
         val posted = manager.activeNotifications.single { it.id == 804 }.notification
+        assertEquals(chimin.remindme.reminders.R.drawable.ic_reminder, posted.smallIcon.resId)
         assertEquals("1 overdue \u00b7 1 today", posted.extras.getString("android.title"))
         assertTrue(posted.extras.getCharSequence("android.bigText").toString().contains("Pick up groceries"))
     }
@@ -187,12 +188,48 @@ class ScenarioSteps {
         device.openNotification()
     }
 
+    @Then("the app symbol is visible in the status bar and captured")
+    fun captureStatusBar(): Unit = with(state) {
+        device.pressHome()
+        device.waitForIdle()
+        captureReminder("visible_in_status_bar") {
+            assertTrue(device.wait(Until.gone(By.text("1 overdue \u00b7 1 today")), 15000))
+            device.waitForIdle()
+        }
+    }
+
     @Then("the reminder notification is visible and captured")
     fun captureNotification(): Unit = with(state) {
-        assertTrue(device.wait(Until.hasObject(By.text("1 overdue \u00b7 1 today")), 10000))
+        captureReminder("tasks_are_due") {
+            assertTrue(device.wait(Until.hasObject(By.text("1 overdue \u00b7 1 today")), 10000))
+            device.findObject(By.desc("Collapse"))?.click()
+            device.waitForIdle()
+        }
+    }
+
+    @When("the reminder notification is expanded")
+    fun expandNotification(): Unit = with(state) {
+        device.findObject(By.desc("Expand"))?.click()
+        device.waitForIdle()
+    }
+
+    @Then("the expanded reminder notification is visible and captured")
+    fun captureExpandedNotification(): Unit = with(state) {
+        captureReminder("expanded") {
+            assertTrue(device.wait(Until.hasObject(By.textContains("Pick up groceries")), 10000))
+        }
+    }
+
+    private fun captureReminder(condition: String, check: () -> Unit = {}) = with(state) {
         val directory = File(context.getExternalFilesDir("test_output"), "golden/daily_reminder")
         directory.mkdirs()
-        assertTrue(device.takeScreenshot(File(directory, "daily_reminder_when_tasks_are_due.png")))
+        try {
+            check()
+            assertTrue(device.takeScreenshot(File(directory, "daily_reminder_when_$condition.png")))
+        } catch (failure: Throwable) {
+            device.takeScreenshot(File(directory, "daily_reminder_when_${condition}_FAILED.png"))
+            throw failure
+        }
     }
 
     @When("the reminder summary notification is tapped")

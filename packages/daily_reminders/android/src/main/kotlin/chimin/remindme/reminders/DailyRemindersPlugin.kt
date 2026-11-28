@@ -178,7 +178,7 @@ object DailyReminders {
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val tap = PendingIntent.getActivity(context, ID, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(context, CHANNEL) else Notification.Builder(context)
-        builder.setSmallIcon(context.applicationInfo.icon)
+        builder.setSmallIcon(R.drawable.ic_reminder)
             .setContentTitle(counts)
             .setContentText(titles.joinToString(", ").take(4000))
             .setStyle(Notification.BigTextStyle().bigText(titles.joinToString("\n").take(20000)))
